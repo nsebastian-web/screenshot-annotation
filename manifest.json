@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Screenshot & Annotation Tool",
+  "version": "1.0.0",
+  "description": "Take screenshots and add annotations with arrows, text, and shapes",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "scripting",
+    "windows",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "hand-drawn-arrows/*.png",
+        "hand-drawn-arrows/arrow1.png",
+        "hand-drawn-arrows/arrow2.png",
+        "hand-drawn-arrows/arrow3.png",
+        "hand-drawn-arrows/arrow4.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

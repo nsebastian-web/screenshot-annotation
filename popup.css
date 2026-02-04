@@ -1,0 +1,77 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 300px;
+  min-height: 200px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+  background: #f2f2f7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  padding: 20px;
+}
+
+h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #000;
+  margin-bottom: 20px;
+  text-align: center;
+  letter-spacing: -0.3px;
+}
+
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn {
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn-primary {
+  background: #007AFF;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+
+.btn-primary:hover {
+  background: #0051D5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3);
+}
+
+.info {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(0, 122, 255, 0.1);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #007AFF;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+#errorMsg {
+  color: #FF3B30;
+  font-size: 13px;
+  line-height: 1.4;
+}

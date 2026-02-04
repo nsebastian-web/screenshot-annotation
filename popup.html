@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screenshot & Annotation</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h2>Screenshot & Annotation</h2>
+    
+    <div class="button-group">
+      <button id="captureBtn" class="btn btn-primary">
+        <span id="btnText">📸 Capture Screenshot</span>
+        <span id="btnLoading" style="display: none;">⏳ Capturing...</span>
+      </button>
+    </div>
+    
+    <div class="info">
+      <p>Click the button to capture the current page and start annotating!</p>
+      <p id="errorMsg" style="display: none; color: red; margin-top: 10px; font-size: 12px;"></p>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
