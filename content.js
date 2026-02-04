@@ -1997,7 +1997,7 @@ function handleCanvasClick(e) {
     // Capture arrow type before switching tools (switchToSelectTool sets selectedArrowType to null)
     const arrowType = selectedArrowType;
 
-    // Add new arrow annotation with selected arrow type
+    // Add new arrow annotation with selected arrow type and color
     annotations.push({
       type: 'arrow',
       x: x - 25,
@@ -2005,6 +2005,7 @@ function handleCanvasClick(e) {
       width: 50,
       height: 50,
       arrowImage: arrowType,
+      color: selectedColor, // Use the selected color from color picker
       rotation: 0
     });
 
@@ -2290,11 +2291,32 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
     return true;
   }
 
-  // Draw arrow
+  // Draw arrow (with color tinting)
   if (annotation.type === 'arrow' && annotation.arrowImage) {
     const arrowImg = arrowImageCache[annotation.arrowImage];
     if (arrowImg && arrowImg.complete && arrowImg.naturalWidth > 0) {
-      ctx.drawImage(arrowImg, bounds.x, bounds.y, bounds.width, bounds.height);
+      // If arrow has a color property, colorize it; otherwise draw normally (backward compatibility)
+      if (annotation.color) {
+        // Create a temporary canvas to colorize the arrow
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = bounds.width;
+        tempCanvas.height = bounds.height;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Draw the arrow image
+        tempCtx.drawImage(arrowImg, 0, 0, bounds.width, bounds.height);
+
+        // Apply color tint using composite operation
+        tempCtx.globalCompositeOperation = 'source-in';
+        tempCtx.fillStyle = annotation.color;
+        tempCtx.fillRect(0, 0, bounds.width, bounds.height);
+
+        // Draw the colorized arrow onto the main canvas
+        ctx.drawImage(tempCanvas, bounds.x, bounds.y);
+      } else {
+        // No color specified, draw original red arrow
+        ctx.drawImage(arrowImg, bounds.x, bounds.y, bounds.width, bounds.height);
+      }
       return true;
     }
     return false; // Arrow not ready
@@ -2594,7 +2616,28 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
       // Image is ready - draw it!
       try {
-        ctx.drawImage(img, bounds.x, bounds.y, bounds.width, bounds.height);
+        // Apply color tinting if arrow has a color property
+        if (annotation.color) {
+          // Create a temporary canvas to colorize the arrow
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = bounds.width;
+          tempCanvas.height = bounds.height;
+          const tempCtx = tempCanvas.getContext('2d');
+
+          // Draw the arrow image
+          tempCtx.drawImage(img, 0, 0, bounds.width, bounds.height);
+
+          // Apply color tint using composite operation
+          tempCtx.globalCompositeOperation = 'source-in';
+          tempCtx.fillStyle = annotation.color;
+          tempCtx.fillRect(0, 0, bounds.width, bounds.height);
+
+          // Draw the colorized arrow onto the main canvas
+          ctx.drawImage(tempCanvas, bounds.x, bounds.y);
+        } else {
+          // No color specified, draw original red arrow
+          ctx.drawImage(img, bounds.x, bounds.y, bounds.width, bounds.height);
+        }
         ctx.restore();
         // Draw selection handles after restoring context
         if (isSelected) {
