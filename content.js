@@ -1131,6 +1131,9 @@ function showAnnotationOverlay() {
     } else if (e.key === 'b' || e.key === 'B') {
       // B for Blur tool
       selectTool('blur');
+    } else if (e.key === 'h' || e.key === 'H') {
+      // H for Highlight tool
+      selectTool('highlight');
     }
   };
   document.addEventListener('keydown', documentKeydownHandler);
@@ -1209,6 +1212,27 @@ function getAnnotationBounds(annotation) {
 
   if (annotation.type === 'freehand') {
     // Calculate bounds from points if not already set
+    if (annotation.points && annotation.points.length > 0) {
+      const bounds = calculateFreehandBounds(annotation.points);
+      return {
+        x: bounds.x,
+        y: bounds.y,
+        width: Math.max(bounds.width, 10),
+        height: Math.max(bounds.height, 10),
+        rotation: annotation.rotation || 0
+      };
+    }
+    return {
+      x: annotation.x || 0,
+      y: annotation.y || 0,
+      width: annotation.width || 10,
+      height: annotation.height || 10,
+      rotation: annotation.rotation || 0
+    };
+  }
+
+  if (annotation.type === 'highlight') {
+    // Calculate bounds from points if not already set (same as freehand)
     if (annotation.points && annotation.points.length > 0) {
       const bounds = calculateFreehandBounds(annotation.points);
       return {
@@ -1369,8 +1393,8 @@ function handleMouseDown(e) {
     let clickedAnnotation = -1;
     for (let i = annotations.length - 1; i >= 0; i--) {
       const annotation = annotations[i];
-      // Skip freehand annotations - they don't have selection/move/resize/rotate
-      if (annotation.type === 'freehand') continue;
+      // Skip freehand and highlight annotations - they don't have selection/move/resize/rotate
+      if (annotation.type === 'freehand' || annotation.type === 'highlight') continue;
       const bounds = getAnnotationBounds(annotation);
       if (bounds) {
         // Simple bounding box check first (faster)
@@ -1541,6 +1565,29 @@ function handleMouseDown(e) {
     };
 
     annotations.push(freehandAnnotation);
+    selectedAnnotationIndex = annotations.length - 1;
+    return;
+  }
+
+  // Highlight tool - start drawing highlight stroke (similar to pen but with different style)
+  if (currentTool === 'highlight') {
+    if (isSelectingArea) {
+      cancelAreaSelection();
+    }
+
+    isDrawingHighlight = true;
+    currentHighlightPoints = [{ x, y }];
+
+    // Create the highlight annotation immediately
+    const highlightAnnotation = {
+      type: 'highlight',
+      points: currentHighlightPoints,
+      color: selectedColor,
+      strokeWidth: selectedStrokeWidth * 3, // Thicker than pen by default
+      rotation: 0
+    };
+
+    annotations.push(highlightAnnotation);
     selectedAnnotationIndex = annotations.length - 1;
     return;
   }
@@ -1742,6 +1789,16 @@ function handleMouseMove(e) {
     redrawAnnotations();
     return;
   }
+
+  // Handle highlight drawing
+  if (isDrawingHighlight && selectedAnnotationIndex >= 0) {
+    const annotation = annotations[selectedAnnotationIndex];
+    // Add point to the path
+    currentHighlightPoints.push({ x: currentX, y: currentY });
+    annotation.points = currentHighlightPoints;
+    redrawAnnotations();
+    return;
+  }
   
   if (isDragging && selectedAnnotationIndex >= 0) {
     const annotation = annotations[selectedAnnotationIndex];
@@ -1853,6 +1910,33 @@ function handleMouseUp(e) {
     return;
   }
 
+  // Complete highlight drawing
+  if (isDrawingHighlight) {
+    const annotation = annotations[selectedAnnotationIndex];
+    // Remove if too few points (accidental click)
+    if (currentHighlightPoints.length < 3) {
+      annotations.splice(selectedAnnotationIndex, 1);
+      selectedAnnotationIndex = -1;
+    } else {
+      // Simplify the path to reduce point count while keeping shape
+      annotation.points = simplifyPath(currentHighlightPoints, 2);
+      // Calculate bounding box for the highlight path
+      const bounds = calculateFreehandBounds(annotation.points);
+      annotation.x = bounds.x;
+      annotation.y = bounds.y;
+      annotation.width = bounds.width;
+      annotation.height = bounds.height;
+      // Save state after completing highlight drawing
+      saveState();
+      // Switch to Select tool after adding highlight
+      switchToSelectTool();
+    }
+    isDrawingHighlight = false;
+    currentHighlightPoints = [];
+    redrawAnnotations();
+    return;
+  }
+
   if (isRotating || isResizing || isDragging) {
     // Save state after completing move/resize/rotate
     if (selectedAnnotationIndex >= 0) {
@@ -1913,7 +1997,7 @@ function handleCanvasClick(e) {
     // Capture arrow type before switching tools (switchToSelectTool sets selectedArrowType to null)
     const arrowType = selectedArrowType;
 
-    // Add new arrow annotation with selected arrow type
+    // Add new arrow annotation with selected arrow type and color
     annotations.push({
       type: 'arrow',
       x: x - 25,
@@ -1921,6 +2005,7 @@ function handleCanvasClick(e) {
       width: 50,
       height: 50,
       arrowImage: arrowType,
+      color: selectedColor, // Use the selected color from color picker
       rotation: 0
     });
 
@@ -2206,11 +2291,32 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
     return true;
   }
 
-  // Draw arrow
+  // Draw arrow (with color tinting)
   if (annotation.type === 'arrow' && annotation.arrowImage) {
     const arrowImg = arrowImageCache[annotation.arrowImage];
     if (arrowImg && arrowImg.complete && arrowImg.naturalWidth > 0) {
-      ctx.drawImage(arrowImg, bounds.x, bounds.y, bounds.width, bounds.height);
+      // If arrow has a color property, colorize it; otherwise draw normally (backward compatibility)
+      if (annotation.color) {
+        // Create a temporary canvas to colorize the arrow
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = bounds.width;
+        tempCanvas.height = bounds.height;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Draw the arrow image
+        tempCtx.drawImage(arrowImg, 0, 0, bounds.width, bounds.height);
+
+        // Apply color tint using composite operation
+        tempCtx.globalCompositeOperation = 'source-in';
+        tempCtx.fillStyle = annotation.color;
+        tempCtx.fillRect(0, 0, bounds.width, bounds.height);
+
+        // Draw the colorized arrow onto the main canvas
+        ctx.drawImage(tempCanvas, bounds.x, bounds.y);
+      } else {
+        // No color specified, draw original red arrow
+        ctx.drawImage(arrowImg, bounds.x, bounds.y, bounds.width, bounds.height);
+      }
       return true;
     }
     return false; // Arrow not ready
@@ -2241,6 +2347,37 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
     }
 
     ctx.stroke();
+    return true;
+  }
+
+  // Draw highlight path (similar to freehand but with transparency)
+  if (annotation.type === 'highlight' && annotation.points && annotation.points.length > 1) {
+    ctx.save();
+    ctx.globalAlpha = 0.4; // Make it semi-transparent like a real highlighter
+    ctx.beginPath();
+    ctx.strokeStyle = annotation.color || '#FFFF00'; // Default to yellow
+    ctx.lineWidth = annotation.strokeWidth || 9; // Thicker than pen
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const points = annotation.points;
+    ctx.moveTo(points[0].x, points[0].y);
+
+    // Use quadratic curves for smoother lines
+    for (let i = 1; i < points.length - 1; i++) {
+      const xc = (points[i].x + points[i + 1].x) / 2;
+      const yc = (points[i].y + points[i + 1].y) / 2;
+      ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+    }
+
+    // Draw to the last point
+    if (points.length > 1) {
+      const lastPoint = points[points.length - 1];
+      ctx.lineTo(lastPoint.x, lastPoint.y);
+    }
+
+    ctx.stroke();
+    ctx.restore();
     return true;
   }
 
@@ -2364,10 +2501,10 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     return;
   }
 
-  if (annotation.type === 'freehand') {
+  if (annotation.type === 'freehand' || annotation.type === 'highlight') {
     renderAnnotationShape(ctx, annotation, bounds);
     ctx.restore();
-    // Freehand drawings don't have selection handles - they're just drawn paths
+    // Freehand and highlight drawings don't have selection handles - they're just drawn paths
     return;
   }
 
@@ -2479,7 +2616,28 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     if (img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
       // Image is ready - draw it!
       try {
-        ctx.drawImage(img, bounds.x, bounds.y, bounds.width, bounds.height);
+        // Apply color tinting if arrow has a color property
+        if (annotation.color) {
+          // Create a temporary canvas to colorize the arrow
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = bounds.width;
+          tempCanvas.height = bounds.height;
+          const tempCtx = tempCanvas.getContext('2d');
+
+          // Draw the arrow image
+          tempCtx.drawImage(img, 0, 0, bounds.width, bounds.height);
+
+          // Apply color tint using composite operation
+          tempCtx.globalCompositeOperation = 'source-in';
+          tempCtx.fillStyle = annotation.color;
+          tempCtx.fillRect(0, 0, bounds.width, bounds.height);
+
+          // Draw the colorized arrow onto the main canvas
+          ctx.drawImage(tempCanvas, bounds.x, bounds.y);
+        } else {
+          // No color specified, draw original red arrow
+          ctx.drawImage(img, bounds.x, bounds.y, bounds.width, bounds.height);
+        }
         ctx.restore();
         // Draw selection handles after restoring context
         if (isSelected) {
@@ -2853,10 +3011,10 @@ function saveScreenshot(filename = null) {
         finalCtx.translate(-centerX, -centerY);
       }
 
-      // Use shared helper for text, rectangle, circle, arrow, and freehand
+      // Use shared helper for text, rectangle, circle, arrow, freehand, and highlight
       if (annotation.type === 'text' || annotation.type === 'rectangle' ||
           annotation.type === 'circle' || annotation.type === 'arrow' ||
-          annotation.type === 'freehand') {
+          annotation.type === 'freehand' || annotation.type === 'highlight') {
         renderAnnotationShape(finalCtx, annotation, bounds);
         finalCtx.restore();
         return;
@@ -2977,10 +3135,10 @@ function copyToClipboard() {
         finalCtx.translate(-centerX, -centerY);
       }
 
-      // Use shared helper for text, rectangle, circle, arrow, and freehand
+      // Use shared helper for text, rectangle, circle, arrow, freehand, and highlight
       if (annotation.type === 'text' || annotation.type === 'rectangle' ||
           annotation.type === 'circle' || annotation.type === 'arrow' ||
-          annotation.type === 'freehand') {
+          annotation.type === 'freehand' || annotation.type === 'highlight') {
         renderAnnotationShape(finalCtx, annotation, bounds);
         finalCtx.restore();
         return;
