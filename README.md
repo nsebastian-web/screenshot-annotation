@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # Screenshot & Annotation Chrome Extension
 
 A Chrome extension that allows you to take screenshots and add annotations including arrows, text, shapes, and more.
@@ -97,4 +97,4 @@ To modify the extension:
 =======
 # screenshots-annotations
 This is a Chrome Browser Extension for taking screenshots and adding annotations
->>>>>>> 0d719119958bec13d4ae67c85feef6f6fd8484bc
+
