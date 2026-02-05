@@ -28,6 +28,26 @@ let selectedColor = '#FF0000'; // Default color (red)
 let selectedStrokeWidth = 3; // Default stroke width
 let isTextEditing = false; // Track if text is being edited
 
+// Default keyboard shortcuts configuration
+const DEFAULT_SHORTCUTS = {
+  selectTool: 'v',
+  penTool: 'p',
+  highlightTool: 'h',
+  textTool: 't',
+  blurTool: 'b',
+  rectangleTool: 'r',
+  circleTool: 'c',
+  undo: 'ctrl+z',
+  redo: 'ctrl+y',
+  copy: 'ctrl+c',
+  delete: 'delete',
+  escape: 'escape',
+  save: 'ctrl+s'
+};
+
+// User's custom shortcuts (loaded from storage)
+let userShortcuts = { ...DEFAULT_SHORTCUTS };
+
 // Undo/Redo history
 let undoHistory = [];
 let redoHistory = [];
@@ -878,6 +898,9 @@ function showAnnotationOverlay() {
           <input type="color" id="color-picker" value="${selectedColor}" />
         </div>
         <div class="action-group">
+          <button class="action-btn icon-btn" id="settingsBtn" title="Keyboard Shortcuts Settings">
+            <span class="icon">⚙️</span>
+          </button>
           <button class="action-btn icon-btn" id="undoBtn" title="Undo (⌘Z / Ctrl+Z)" disabled>
             <span class="icon">↶</span>
           </button>
@@ -912,7 +935,91 @@ function showAnnotationOverlay() {
     </div>
   `;
   document.body.appendChild(filenameContainer);
-  
+
+  // Create settings modal
+  const settingsModal = document.createElement('div');
+  settingsModal.id = 'keyboard-settings-modal';
+  settingsModal.innerHTML = `
+    <div class="settings-modal-content">
+      <div class="settings-header">
+        <h2>⌨️ Keyboard Shortcuts</h2>
+        <button class="settings-close" id="settings-close-btn">✕</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-section">
+          <h3>Tools</h3>
+          <div class="shortcut-row">
+            <label>Select Tool</label>
+            <input type="text" id="shortcut-selectTool" class="shortcut-input" placeholder="v" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Pen Tool</label>
+            <input type="text" id="shortcut-penTool" class="shortcut-input" placeholder="p" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Highlight Tool</label>
+            <input type="text" id="shortcut-highlightTool" class="shortcut-input" placeholder="h" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Text Tool</label>
+            <input type="text" id="shortcut-textTool" class="shortcut-input" placeholder="t" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Blur Tool</label>
+            <input type="text" id="shortcut-blurTool" class="shortcut-input" placeholder="b" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Rectangle Tool</label>
+            <input type="text" id="shortcut-rectangleTool" class="shortcut-input" placeholder="r" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Circle Tool</label>
+            <input type="text" id="shortcut-circleTool" class="shortcut-input" placeholder="c" readonly />
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Actions</h3>
+          <div class="shortcut-row">
+            <label>Undo</label>
+            <input type="text" id="shortcut-undo" class="shortcut-input" placeholder="Ctrl+Z" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Redo</label>
+            <input type="text" id="shortcut-redo" class="shortcut-input" placeholder="Ctrl+Y" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Copy to Clipboard</label>
+            <input type="text" id="shortcut-copy" class="shortcut-input" placeholder="Ctrl+C" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Delete Selected</label>
+            <input type="text" id="shortcut-delete" class="shortcut-input" placeholder="Delete" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Save Screenshot</label>
+            <input type="text" id="shortcut-save" class="shortcut-input" placeholder="Ctrl+S" readonly />
+          </div>
+          <div class="shortcut-row">
+            <label>Deselect (Escape)</label>
+            <input type="text" id="shortcut-escape" class="shortcut-input" placeholder="Escape" readonly />
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Movement</h3>
+          <div class="shortcut-info">
+            <p><strong>Arrow Keys:</strong> Move selected annotation by 1px</p>
+            <p><strong>Shift + Arrow Keys:</strong> Move selected annotation by 10px</p>
+          </div>
+        </div>
+      </div>
+      <div class="settings-footer">
+        <button class="settings-btn" id="settings-reset-btn">Reset to Defaults</button>
+        <button class="settings-btn primary" id="settings-save-btn">Save Changes</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(settingsModal);
+
   // Setup canvas
   const img = document.getElementById('screenshot-img');
   const canvas = document.getElementById('annotation-canvas');
@@ -1098,18 +1205,69 @@ function showAnnotationOverlay() {
   
   // Keyboard shortcuts - store reference for cleanup
   documentKeydownHandler = (e) => {
+    // Handle shortcut recording first
+    if (isRecording) {
+      handleShortcutRecording(e);
+      return;
+    }
+
     // Don't handle shortcuts if text editing is active
     if (isTextEditing) return;
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    // Build current key combination
+    const parts = [];
+    if (e.ctrlKey) parts.push('ctrl');
+    if (e.shiftKey) parts.push('shift');
+    if (e.altKey) parts.push('alt');
+    if (e.metaKey) parts.push('meta');
+    parts.push(e.key.toLowerCase());
+    const currentShortcut = parts.join('+');
+
+    // Check for arrow key movement (when annotation is selected)
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase()) && selectedAnnotationIndex >= 0) {
+      e.preventDefault();
+      const annotation = annotations[selectedAnnotationIndex];
+
+      // Skip freehand and highlight - they don't support movement
+      if (annotation.type === 'freehand' || annotation.type === 'highlight') {
+        return;
+      }
+
+      const moveDistance = e.shiftKey ? 10 : 1;
+
+      switch (e.key.toLowerCase()) {
+        case 'arrowup':
+          annotation.y -= moveDistance;
+          break;
+        case 'arrowdown':
+          annotation.y += moveDistance;
+          break;
+        case 'arrowleft':
+          annotation.x -= moveDistance;
+          break;
+        case 'arrowright':
+          annotation.x += moveDistance;
+          break;
+      }
+
+      saveState();
+      redrawAnnotations();
+      return;
+    }
+
+    // Check custom shortcuts
+    if (currentShortcut === userShortcuts.undo) {
       e.preventDefault();
       undo();
-    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+    } else if (currentShortcut === userShortcuts.redo) {
       e.preventDefault();
       redo();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    } else if (currentShortcut === userShortcuts.copy) {
       e.preventDefault();
       copyToClipboard();
+    } else if (currentShortcut === userShortcuts.save) {
+      e.preventDefault();
+      showSaveAsDialog();
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAnnotationIndex >= 0) {
       e.preventDefault();
       deleteSelected();
@@ -1119,21 +1277,31 @@ function showAnnotationOverlay() {
         selectedAnnotationIndex = -1;
         redrawAnnotations();
       }
-    } else if (e.key === 'v' || e.key === 'V') {
-      // V for Select tool
+    } else if (e.key.toLowerCase() === userShortcuts.selectTool) {
+      // Select tool
       switchToSelectTool();
-    } else if (e.key === 'p' || e.key === 'P') {
-      // P for Pen tool
+    } else if (e.key.toLowerCase() === userShortcuts.penTool) {
+      // Pen tool
       selectTool('pen');
-    } else if (e.key === 't' || e.key === 'T') {
-      // T for Text tool
-      selectTool('text');
-    } else if (e.key === 'b' || e.key === 'B') {
-      // B for Blur tool
-      selectTool('blur');
-    } else if (e.key === 'h' || e.key === 'H') {
-      // H for Highlight tool
+    } else if (e.key.toLowerCase() === userShortcuts.highlightTool) {
+      // Highlight tool
       selectTool('highlight');
+    } else if (e.key.toLowerCase() === userShortcuts.textTool) {
+      // Text tool
+      selectTool('text');
+    } else if (e.key.toLowerCase() === userShortcuts.blurTool) {
+      // Blur tool
+      selectTool('blur');
+    } else if (e.key.toLowerCase() === userShortcuts.rectangleTool) {
+      // Rectangle tool
+      currentTool = 'rectangle';
+      selectedShapeType = 'rectangle';
+      selectTool('rectangle');
+    } else if (e.key.toLowerCase() === userShortcuts.circleTool) {
+      // Circle tool
+      currentTool = 'circle';
+      selectedShapeType = 'circle';
+      selectTool('circle');
     }
   };
   document.addEventListener('keydown', documentKeydownHandler);
@@ -1157,6 +1325,163 @@ function showAnnotationOverlay() {
       cancelSaveAs();
     }
   });
+
+  // Settings modal functionality
+  loadKeyboardShortcuts();
+  setupSettingsModal();
+}
+
+// Load keyboard shortcuts from storage
+function loadKeyboardShortcuts() {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
+    chrome.storage.sync.get(['keyboardShortcuts'], (result) => {
+      if (result.keyboardShortcuts) {
+        userShortcuts = { ...DEFAULT_SHORTCUTS, ...result.keyboardShortcuts };
+      }
+      updateShortcutInputs();
+    });
+  } else {
+    // Fallback for testing outside Chrome extension
+    updateShortcutInputs();
+  }
+}
+
+// Save keyboard shortcuts to storage
+function saveKeyboardShortcuts() {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
+    chrome.storage.sync.set({ keyboardShortcuts: userShortcuts }, () => {
+      console.log('Keyboard shortcuts saved');
+    });
+  }
+}
+
+// Update shortcut input fields with current values
+function updateShortcutInputs() {
+  Object.keys(userShortcuts).forEach(key => {
+    const input = document.getElementById(`shortcut-${key}`);
+    if (input) {
+      input.value = formatShortcutDisplay(userShortcuts[key]);
+    }
+  });
+}
+
+// Format shortcut for display (e.g., "ctrl+z" -> "Ctrl+Z")
+function formatShortcutDisplay(shortcut) {
+  return shortcut.split('+').map(part => {
+    if (part === 'ctrl') return 'Ctrl';
+    if (part === 'shift') return 'Shift';
+    if (part === 'alt') return 'Alt';
+    if (part === 'meta') return 'Cmd';
+    return part.toUpperCase();
+  }).join('+');
+}
+
+// Setup settings modal event listeners
+function setupSettingsModal() {
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsModal = document.getElementById('keyboard-settings-modal');
+  const closeBtn = document.getElementById('settings-close-btn');
+  const saveBtn = document.getElementById('settings-save-btn');
+  const resetBtn = document.getElementById('settings-reset-btn');
+
+  // Open settings
+  settingsBtn.addEventListener('click', () => {
+    settingsModal.classList.add('show');
+    updateShortcutInputs();
+  });
+
+  // Close settings
+  closeBtn.addEventListener('click', () => {
+    settingsModal.classList.remove('show');
+  });
+
+  // Close on background click
+  settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) {
+      settingsModal.classList.remove('show');
+    }
+  });
+
+  // Save shortcuts
+  saveBtn.addEventListener('click', () => {
+    saveKeyboardShortcuts();
+    settingsModal.classList.remove('show');
+    alert('Keyboard shortcuts saved!');
+  });
+
+  // Reset to defaults
+  resetBtn.addEventListener('click', () => {
+    if (confirm('Reset all keyboard shortcuts to defaults?')) {
+      userShortcuts = { ...DEFAULT_SHORTCUTS };
+      updateShortcutInputs();
+      saveKeyboardShortcuts();
+    }
+  });
+
+  // Setup shortcut recording for each input
+  document.querySelectorAll('.shortcut-input').forEach(input => {
+    input.addEventListener('click', () => {
+      startRecordingShortcut(input);
+    });
+  });
+}
+
+// Record a new keyboard shortcut
+let isRecording = false;
+let recordingInput = null;
+
+function startRecordingShortcut(input) {
+  if (isRecording) return;
+
+  isRecording = true;
+  recordingInput = input;
+  input.classList.add('recording');
+  input.value = 'Press a key...';
+  input.placeholder = 'Press a key...';
+}
+
+// Handle shortcut recording
+function handleShortcutRecording(e) {
+  if (!isRecording || !recordingInput) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Build shortcut string
+  const parts = [];
+  if (e.ctrlKey) parts.push('ctrl');
+  if (e.shiftKey) parts.push('shift');
+  if (e.altKey) parts.push('alt');
+  if (e.metaKey) parts.push('meta');
+
+  // Add the actual key (if it's not a modifier)
+  if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+    parts.push(e.key.toLowerCase());
+  }
+
+  if (parts.length > 0 && parts[parts.length - 1] !== 'ctrl' &&
+      parts[parts.length - 1] !== 'shift' && parts[parts.length - 1] !== 'alt' &&
+      parts[parts.length - 1] !== 'meta') {
+    const shortcut = parts.join('+');
+    const shortcutKey = recordingInput.id.replace('shortcut-', '');
+
+    // Check for conflicts
+    const conflict = Object.keys(userShortcuts).find(key =>
+      key !== shortcutKey && userShortcuts[key] === shortcut
+    );
+
+    if (conflict) {
+      alert(`This shortcut is already used by "${conflict}"`);
+      recordingInput.value = formatShortcutDisplay(userShortcuts[shortcutKey]);
+    } else {
+      userShortcuts[shortcutKey] = shortcut;
+      recordingInput.value = formatShortcutDisplay(shortcut);
+    }
+
+    recordingInput.classList.remove('recording');
+    isRecording = false;
+    recordingInput = null;
+  }
 }
 
 function getAnnotationBounds(annotation) {
