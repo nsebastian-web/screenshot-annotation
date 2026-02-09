@@ -1,17 +1,17 @@
-# Release Notes - Version 3.0.0
+# Release Notes - Version 4.0.0
 
 **Release Date:** February 9, 2026
 **Extension:** Screenshot & Annotate Chrome Extension
 
 ---
 
-## 🎉 Major Release: Version 3.0.0
+## 🎉 Major Release: Version 4.0.0
 
 This is a major feature release packed with professional-grade enhancements including adjustable opacity, advanced text formatting, numbered callouts, multi-format export, annotation templates, and much more!
 
 ---
 
-## ✨ What's New in v3.0.0
+## ✨ What's New in v4.0.0
 
 ### 🎨 **Line Tool with Arrow Endpoints**
 - ✏️ Draw straight lines with customizable arrow endpoints
@@ -305,7 +305,7 @@ This is a major feature release packed with professional-grade enhancements incl
 
 ## 📝 Changelog Summary
 
-**v3.0.0** (2026-02-09)
+**v4.0.0** (2026-02-09)
 - ✨ Added line tool with arrow endpoints (start/end toggles)
 - ✨ Added global opacity slider (0-100%) for all annotations
 - ✨ Added stroke width presets (S/M/L/XL quick-select)
@@ -320,7 +320,7 @@ This is a major feature release packed with professional-grade enhancements incl
 - 📚 Added 100+ lines of CSS for new UI elements
 - 🔧 Improved code organization with v3.0 markers
 - 🔧 Maintained backward compatibility with v2.0
-- 📄 Updated manifest to version 3.0.0
+- 📄 Updated manifest to version 4.0.0
 - 📝 Comprehensive release documentation
 
 **v2.0.0** (2026-02-05)
@@ -361,22 +361,22 @@ MIT License - Free to use and modify for personal and commercial projects.
 
 ## 🎊 Thank You!
 
-Thank you for using Screenshot & Annotate v3.0! We hope these powerful new features enhance your productivity and make annotation work more efficient and enjoyable.
+Thank you for using Screenshot & Annotate v4.0! We hope these powerful new features enhance your productivity and make annotation work more efficient and enjoyable.
 
 **Enjoy the new features!** 📸✨🎨
 
 ---
 
-**Version:** 3.0.0
+**Version:** 4.0.0
 **Build Date:** February 9, 2026
 **Release Type:** Stable (Major Feature Release)
-**Download:** [GitHub Releases](https://github.com/nsebastian-web/screenshot-annotation/releases/tag/v3.0.0)
+**Download:** [GitHub Releases](https://github.com/nsebastian-web/screenshot-annotation/releases/tag/v4.0.0)
 
 ---
 
 ## 🔄 Migration Notes
 
-**From v2.0 to v3.0:**
+**From v2.0 to v4.0:**
 - ✅ No breaking changes
 - ✅ All v2.0 annotations render correctly
 - ✅ Keyboard shortcuts preserved
@@ -396,4 +396,4 @@ Thank you for using Screenshot & Annotate v3.0! We hope these powerful new featu
 
 ---
 
-**🎉 Enjoy Screenshot & Annotate v3.0.0! 🎉**
+**🎉 Enjoy Screenshot & Annotate v4.0.0! 🎉**
