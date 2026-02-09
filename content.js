@@ -9,6 +9,7 @@ let annotations = [];
 let currentTool = 'select';
 let selectedArrowType = null; // Track which arrow is selected
 let selectedShapeType = null; // Track which shape is selected (rectangle, circle)
+let selectedEmoji = null; // Track which emoji is selected
 let selectedAnnotationIndex = -1;
 let isDragging = false;
 let isResizing = false;
@@ -26,6 +27,9 @@ let dragOffsetY = 0;
 let hoveredHandle = null; // Track which handle is being hovered
 let selectedColor = '#FF0000'; // Default color (red)
 let selectedStrokeWidth = 3; // Default stroke width
+let highlightBrushSize = 25; // Default highlight brush size (independent from pen)
+let blurIntensity = 10; // Default blur intensity/radius
+let blurEffectType = 'blur'; // Default blur effect type ('blur' or 'pixelate')
 let isTextEditing = false; // Track if text is being edited
 
 // Default keyboard shortcuts configuration
@@ -127,6 +131,33 @@ function preloadArrowImages() {
 // Preload images when content script loads
 preloadArrowImages();
 
+// Modern SVG Icons System
+const ICONS = {
+  select: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>`,
+  arrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V6M5 12l7-7 7 7"/></svg>`,
+  shapes: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><circle cx="17" cy="7" r="4"/><path d="M3 17h10l-5 4z"/></svg>`,
+  emoji: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`,
+  pen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>`,
+  text: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>`,
+  blur: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+  crop: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.13 1L6 16a2 2 0 0 0 2 2h15"/><path d="M1 6.13L16 6a2 2 0 0 1 2 2v15"/></svg>`,
+  zoomIn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
+  zoomOut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
+  undo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>`,
+  redo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>`,
+  copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+  clear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
+  save: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`
+};
+
+// Helper function to get icon HTML
+function getIcon(name, size = 18) {
+  const svg = ICONS[name] || ICONS.shapes; // Fallback to shapes if icon not found
+  return `<span class="icon-svg" style="width:${size}px;height:${size}px;display:inline-block;vertical-align:middle;">${svg}</span>`;
+}
+
 // Helper function to switch to Select tool (global scope for access from all functions)
 function switchToSelectTool() {
   selectTool('select');
@@ -157,11 +188,24 @@ function selectTool(toolName) {
   // Update canvas cursor and mode
   const canvas = document.getElementById('annotation-canvas');
   if (canvas) {
+    // Remove all tool mode classes
+    canvas.classList.remove('select-mode', 'pen-mode', 'highlight-mode', 'blur-mode');
+
     if (toolName === 'select') {
       canvas.classList.add('select-mode');
       canvas.style.cursor = 'default';
+    } else if (toolName === 'pen') {
+      canvas.classList.add('pen-mode');
+      canvas.style.cursor = ''; // Let CSS class handle it
+    } else if (toolName === 'highlight') {
+      canvas.classList.add('highlight-mode');
+      canvas.style.cursor = ''; // Let CSS class handle it
+    } else if (toolName === 'blur') {
+      canvas.classList.add('blur-mode');
+      canvas.style.cursor = ''; // Let CSS class handle it
+    } else if (toolName === 'text') {
+      canvas.style.cursor = 'text';
     } else {
-      canvas.classList.remove('select-mode');
       canvas.style.cursor = 'crosshair';
     }
   }
@@ -362,6 +406,7 @@ function cancelAreaSelection() {
 // ==================== CROP OVERLAY FUNCTIONS ====================
 
 function showCropOverlay() {
+  console.log('showCropOverlay() called, screenshotDataUrl:', screenshotDataUrl ? 'exists' : 'null');
   isCropping = true;
   uncropppedDataUrl = screenshotDataUrl;
 
@@ -375,7 +420,7 @@ function showCropOverlay() {
     width: 100vw;
     height: 100vh;
     background: rgba(0, 0, 0, 0.9);
-    z-index: 999998;
+    z-index: 1000000;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -850,68 +895,197 @@ function showAnnotationOverlay() {
     <div class="annotation-container">
       <div class="annotation-toolbar">
         <div class="tool-group">
-          <button class="tool-btn ${currentTool === 'select' ? 'active' : ''}" data-tool="select" title="Select/Move (V)">
-            Select
+          <!-- Select Tool (First) -->
+          <button class="tool-btn active" data-tool="select" title="Select (V)">
+            ${getIcon('select', 16)}
           </button>
-          <button class="tool-btn ${currentTool === 'pen' ? 'active' : ''}" data-tool="pen" title="Pen/Freehand Draw (P)">
-            ✏️ Pen
-          </button>
-          <button class="tool-btn ${currentTool === 'highlight' ? 'active' : ''}" data-tool="highlight" title="Highlight/Marker (H)">
-            🖍️ Highlight
-          </button>
-          <button class="tool-btn ${currentTool === 'text' ? 'active' : ''}" data-tool="text" title="Text (T)">
-            Text
-          </button>
-          <button class="tool-btn ${currentTool === 'blur' ? 'active' : ''}" data-tool="blur" title="Blur (B)">
-            Blur
-          </button>
+
+          <!-- Arrow Dropdown -->
           <div class="dropdown-container">
-            <button class="tool-btn dropdown-toggle ${currentTool === 'rectangle' || currentTool === 'circle' ? 'active' : ''}" id="objects-dropdown-toggle" title="Shapes">
-              Objects ▼
+            <button class="tool-btn dropdown-toggle" id="arrow-dropdown-toggle" title="Arrows">
+              ${getIcon('arrow', 16)}
             </button>
-            <div class="dropdown-menu" id="objects-dropdown-menu">
-              <button class="dropdown-item ${currentTool === 'rectangle' ? 'active' : ''}" data-tool="rectangle" title="Rectangle">
-                ▭ Rectangle
+            <div class="dropdown-menu dropdown-horizontal" id="arrow-dropdown-menu">
+              <button class="dropdown-item arrow-item" data-arrow="arrow1.png" title="Arrow 1">
+                <img src="${getArrowImageURL('arrow1.png')}" alt="Arrow 1" />
               </button>
-              <button class="dropdown-item ${currentTool === 'circle' ? 'active' : ''}" data-tool="circle" title="Circle">
-                ○ Circle
+              <button class="dropdown-item arrow-item" data-arrow="arrow2.png" title="Arrow 2">
+                <img src="${getArrowImageURL('arrow2.png')}" alt="Arrow 2" />
+              </button>
+              <button class="dropdown-item arrow-item" data-arrow="arrow3.png" title="Arrow 3">
+                <img src="${getArrowImageURL('arrow3.png')}" alt="Arrow 3" />
+              </button>
+              <button class="dropdown-item arrow-item" data-arrow="arrow4.png" title="Arrow 4">
+                <img src="${getArrowImageURL('arrow4.png')}" alt="Arrow 4" />
               </button>
             </div>
           </div>
+
+          <!-- Shapes Dropdown -->
+          <div class="dropdown-container">
+            <button class="tool-btn dropdown-toggle" id="shapes-dropdown-toggle" title="Shapes">
+              ${getIcon('shapes', 16)}
+            </button>
+            <div class="dropdown-menu dropdown-horizontal" id="shapes-dropdown-menu">
+              <button class="dropdown-item" data-tool="line" title="Line">—</button>
+              <button class="dropdown-item" data-tool="rectangle" title="Rectangle">▭</button>
+              <button class="dropdown-item" data-tool="filled-rectangle" title="Filled Rectangle">◼</button>
+              <button class="dropdown-item" data-tool="circle" title="Circle">○</button>
+              <button class="dropdown-item" data-tool="filled-circle" title="Filled Circle">●</button>
+            </div>
+          </div>
+
+          <!-- Emoji Dropdown -->
+          <div class="dropdown-container">
+            <button class="tool-btn dropdown-toggle" id="emoji-dropdown-toggle" title="Emoji">
+              ${getIcon('emoji', 16)}
+            </button>
+            <div class="dropdown-menu dropdown-horizontal" id="emoji-dropdown-menu">
+              <button class="dropdown-item emoji-item" data-emoji="😀" title="Smile">😀</button>
+              <button class="dropdown-item emoji-item" data-emoji="😂" title="Laugh">😂</button>
+              <button class="dropdown-item emoji-item" data-emoji="❤️" title="Heart">❤️</button>
+              <button class="dropdown-item emoji-item" data-emoji="👍" title="Thumbs Up">👍</button>
+              <button class="dropdown-item emoji-item" data-emoji="⭐" title="Star">⭐</button>
+              <button class="dropdown-item emoji-item" data-emoji="✅" title="Check">✅</button>
+              <button class="dropdown-item emoji-item" data-emoji="❌" title="X">❌</button>
+              <button class="dropdown-item emoji-item" data-emoji="⚠️" title="Warning">⚠️</button>
+              <button class="dropdown-item emoji-item" data-emoji="💡" title="Idea">💡</button>
+              <button class="dropdown-item emoji-item" data-emoji="📌" title="Pin">📌</button>
+            </div>
+          </div>
+
+          <!-- Pen Tool -->
+          <button class="tool-btn" data-tool="pen" title="Pen (P)">
+            ${getIcon('pen', 16)}
+          </button>
+
+          <!-- Highlight Tool Dropdown -->
+          <div class="dropdown-container">
+            <button class="tool-btn dropdown-toggle" id="highlight-dropdown-toggle" title="Highlight (H)">
+              🖍️
+            </button>
+            <div class="dropdown-menu dropdown-horizontal" id="highlight-dropdown-menu" style="min-width: 180px;">
+              <div class="dropdown-section">
+                <label>Brush Size</label>
+                <input type="range" id="highlight-brush-size" min="10" max="50" value="25" step="1"
+                       style="width: 120px; cursor: pointer;" />
+                <span id="brush-size-display" style="font-size: 11px; color: #fff; margin-left: 4px;">25px</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Text Tool Dropdown -->
+          <div class="dropdown-container">
+            <button class="tool-btn dropdown-toggle" id="text-dropdown-toggle" title="Text (T)">
+              ${getIcon('text', 16)}
+            </button>
+            <div class="dropdown-menu dropdown-horizontal" id="text-dropdown-menu" style="min-width: 200px;">
+              <div class="dropdown-section">
+                <label>Font Family</label>
+                <select id="font-family-select">
+                  <option value="Arial">Arial</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Courier New">Courier New</option>
+                  <option value="Verdana">Verdana</option>
+                  <option value="Comic Sans MS">Comic Sans MS</option>
+                  <option value="Georgia">Georgia</option>
+                </select>
+              </div>
+              <div class="dropdown-section">
+                <label>Font Size</label>
+                <select id="font-size-select">
+                  <option value="8">8px</option>
+                  <option value="10">10px</option>
+                  <option value="12">12px</option>
+                  <option value="14">14px</option>
+                  <option value="16">16px</option>
+                  <option value="18">18px</option>
+                  <option value="20">20px</option>
+                  <option value="24" selected>24px</option>
+                  <option value="28">28px</option>
+                  <option value="32">32px</option>
+                  <option value="36">36px</option>
+                  <option value="48">48px</option>
+                  <option value="60">60px</option>
+                  <option value="72">72px</option>
+                  <option value="96">96px</option>
+                  <option value="144">144px</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Blur Tool Dropdown -->
+          <div class="dropdown-container">
+            <button class="tool-btn dropdown-toggle" id="blur-dropdown-toggle" title="Blur (B)">
+              ${getIcon('blur', 16)}
+            </button>
+            <div class="dropdown-menu dropdown-horizontal" id="blur-dropdown-menu" style="min-width: 280px;">
+              <div class="dropdown-section">
+                <label>Effect Type</label>
+                <select id="blur-effect-type" style="width: 100px; padding: 4px 6px; background: #2d2d2d; color: #fff; border: 1px solid #4a4a4a; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                  <option value="blur">Smooth Blur</option>
+                  <option value="pixelate">Pixelate</option>
+                </select>
+              </div>
+              <div class="dropdown-section">
+                <label>Intensity</label>
+                <input type="range" id="blur-intensity" min="5" max="30" value="10" step="1"
+                       style="width: 100px; cursor: pointer;" />
+                <span id="blur-intensity-display" style="font-size: 11px; color: #fff; margin-left: 4px;">10px</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Crop Tool -->
+          <button class="tool-btn" id="cropBtn" title="Crop">
+            ${getIcon('crop', 16)}
+          </button>
         </div>
-        <div class="arrow-group">
-          <button class="arrow-btn ${selectedArrowType === 'arrow1.png' ? 'active' : ''}" data-arrow="arrow1.png" title="Arrow 1">
-            <img src="${getArrowImageURL('arrow1.png')}" alt="Arrow 1" class="arrow-preview" />
+
+        <!-- Zoom Group -->
+        <div class="zoom-group">
+          <button class="action-btn icon-btn" id="zoomOutBtn" title="Zoom Out">
+            ${getIcon('zoomOut', 16)}
           </button>
-          <button class="arrow-btn ${selectedArrowType === 'arrow2.png' ? 'active' : ''}" data-arrow="arrow2.png" title="Arrow 2">
-            <img src="${getArrowImageURL('arrow2.png')}" alt="Arrow 2" class="arrow-preview" />
-          </button>
-          <button class="arrow-btn ${selectedArrowType === 'arrow3.png' ? 'active' : ''}" data-arrow="arrow3.png" title="Arrow 3">
-            <img src="${getArrowImageURL('arrow3.png')}" alt="Arrow 3" class="arrow-preview" />
-          </button>
-          <button class="arrow-btn ${selectedArrowType === 'arrow4.png' ? 'active' : ''}" data-arrow="arrow4.png" title="Arrow 4">
-            <img src="${getArrowImageURL('arrow4.png')}" alt="Arrow 4" class="arrow-preview" />
+          <span id="zoom-display">100%</span>
+          <button class="action-btn icon-btn" id="zoomInBtn" title="Zoom In">
+            ${getIcon('zoomIn', 16)}
           </button>
         </div>
+
+        <!-- Color Picker -->
         <div class="color-group">
-          <label for="color-picker" class="color-label" title="Color">Color:</label>
+          <label for="color-picker" class="color-label">Color:</label>
           <input type="color" id="color-picker" value="${selectedColor}" />
         </div>
+
+        <!-- Action Buttons -->
         <div class="action-group">
-          <button class="action-btn icon-btn" id="settingsBtn" title="Keyboard Shortcuts Settings">
-            <span class="icon">⚙️</span>
+          <button class="action-btn icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>
+            ${getIcon('undo', 16)}
           </button>
-          <button class="action-btn icon-btn" id="undoBtn" title="Undo (⌘Z / Ctrl+Z)" disabled>
-            <span class="icon">↶</span>
+          <button class="action-btn icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>
+            ${getIcon('redo', 16)}
           </button>
-          <button class="action-btn icon-btn" id="redoBtn" title="Redo (⌘⇧Z / Ctrl+Y)" disabled>
-            <span class="icon">↷</span>
+          <button class="action-btn icon-btn" id="copyBtn" title="Copy (Ctrl+C)">
+            ${getIcon('copy', 16)}
           </button>
-          <button class="action-btn" id="copyBtn" title="Copy to Clipboard (⌘C / Ctrl+C)">Copy</button>
-          <button class="action-btn" id="clearBtn" title="Clear All Annotations">Clear</button>
-          <button class="action-btn" id="saveAsBtn" title="Save Screenshot">Save</button>
-          <button class="action-btn" id="closeBtn" title="Close (Esc)">✕</button>
+          <button class="action-btn" id="clearBtn" title="Clear All">
+            ${getIcon('clear', 14)} Clear
+          </button>
+          <button class="action-btn" id="saveAsBtn" title="Save">
+            ${getIcon('save', 14)} Save
+          </button>
+          <button class="action-btn" id="closeBtn" title="Close">
+            ${getIcon('close', 14)}
+          </button>
         </div>
+
+        <!-- Settings Button -->
+        <button class="action-btn icon-btn" id="settingsBtn" title="Settings">
+          ${getIcon('settings', 16)}
+        </button>
       </div>
       <div class="screenshot-canvas-container">
         <img id="screenshot-img" src="${screenshotDataUrl}" alt="Screenshot" />
@@ -1060,10 +1234,12 @@ function showAnnotationOverlay() {
     // Update selected annotation color if one is selected
     if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
       const annotation = annotations[selectedAnnotationIndex];
-      if (annotation.type === 'text' || annotation.type === 'rectangle' || annotation.type === 'circle') {
+      // Update color for all colorable annotation types
+      const colorableTypes = ['text', 'line', 'rectangle', 'circle', 'filled-rectangle', 'filled-circle', 'arrow', 'freehand', 'highlight'];
+      if (colorableTypes.includes(annotation.type)) {
         annotation.color = selectedColor;
         redrawAnnotations();
-        
+
         // Debounce saveState for color changes (save after user stops dragging)
         clearTimeout(colorChangeTimeout);
         colorChangeTimeout = setTimeout(() => {
@@ -1073,81 +1249,398 @@ function showAnnotationOverlay() {
     }
   });
   
-  // Objects dropdown toggle
-  const objectsDropdownToggle = document.getElementById('objects-dropdown-toggle');
-  const objectsDropdownMenu = document.getElementById('objects-dropdown-menu');
-  
-  objectsDropdownToggle.addEventListener('click', (e) => {
-    e.stopPropagation();
-    objectsDropdownMenu.classList.toggle('show');
-  });
-  
-  // Close dropdown when clicking outside - store reference for cleanup
+  // Arrow dropdown toggle
+  const arrowDropdownToggle = document.getElementById('arrow-dropdown-toggle');
+  const arrowDropdownMenu = document.getElementById('arrow-dropdown-menu');
+
+  if (arrowDropdownToggle && arrowDropdownMenu) {
+    arrowDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      arrowDropdownMenu.classList.toggle('show');
+      // Close other dropdowns
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== arrowDropdownMenu) menu.classList.remove('show');
+      });
+    });
+  }
+
+  // Shapes dropdown toggle
+  const shapesDropdownToggle = document.getElementById('shapes-dropdown-toggle');
+  const shapesDropdownMenu = document.getElementById('shapes-dropdown-menu');
+
+  if (shapesDropdownToggle && shapesDropdownMenu) {
+    shapesDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      shapesDropdownMenu.classList.toggle('show');
+      // Close other dropdowns
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== shapesDropdownMenu) menu.classList.remove('show');
+      });
+    });
+  }
+
+  // Emoji dropdown toggle
+  const emojiDropdownToggle = document.getElementById('emoji-dropdown-toggle');
+  const emojiDropdownMenu = document.getElementById('emoji-dropdown-menu');
+
+  if (emojiDropdownToggle && emojiDropdownMenu) {
+    emojiDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      emojiDropdownMenu.classList.toggle('show');
+      // Close other dropdowns
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== emojiDropdownMenu) menu.classList.remove('show');
+      });
+    });
+  }
+
+  // Text dropdown toggle
+  const textDropdownToggle = document.getElementById('text-dropdown-toggle');
+  const textDropdownMenu = document.getElementById('text-dropdown-menu');
+
+  if (textDropdownToggle && textDropdownMenu) {
+    textDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Toggle text tool first
+      currentTool = 'text';
+      selectedAnnotationIndex = -1;
+      canvas.style.cursor = 'text';
+      canvas.classList.remove('select-mode');
+
+      // Update button states
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.dropdown-toggle').forEach(b => b.classList.remove('active'));
+      textDropdownToggle.classList.add('active');
+
+      // Toggle dropdown
+      textDropdownMenu.classList.toggle('show');
+      // Close other dropdowns
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== textDropdownMenu) menu.classList.remove('show');
+      });
+    });
+  }
+
+  // Highlight dropdown toggle
+  const highlightDropdownToggle = document.getElementById('highlight-dropdown-toggle');
+  const highlightDropdownMenu = document.getElementById('highlight-dropdown-menu');
+  const highlightBrushSizeSlider = document.getElementById('highlight-brush-size');
+  const brushSizeDisplay = document.getElementById('brush-size-display');
+
+  if (highlightDropdownToggle && highlightDropdownMenu) {
+    highlightDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Toggle highlight tool first
+      currentTool = 'highlight';
+      selectedAnnotationIndex = -1;
+      canvas.classList.remove('select-mode', 'pen-mode');
+      canvas.classList.add('highlight-mode');
+      canvas.style.cursor = ''; // Let CSS class handle it
+
+      // Update button states
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.dropdown-toggle').forEach(b => b.classList.remove('active'));
+      highlightDropdownToggle.classList.add('active');
+
+      // Toggle dropdown
+      highlightDropdownMenu.classList.toggle('show');
+      // Close other dropdowns
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== highlightDropdownMenu) menu.classList.remove('show');
+      });
+    });
+  }
+
+  // Highlight brush size slider
+  if (highlightBrushSizeSlider && brushSizeDisplay) {
+    highlightBrushSizeSlider.addEventListener('input', (e) => {
+      highlightBrushSize = parseInt(e.target.value);
+      brushSizeDisplay.textContent = `${highlightBrushSize}px`;
+    });
+  }
+
+  // Blur dropdown toggle
+  const blurDropdownToggle = document.getElementById('blur-dropdown-toggle');
+  const blurDropdownMenu = document.getElementById('blur-dropdown-menu');
+  const blurIntensitySlider = document.getElementById('blur-intensity');
+  const blurIntensityDisplay = document.getElementById('blur-intensity-display');
+
+  if (blurDropdownToggle && blurDropdownMenu) {
+    blurDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Toggle blur tool first
+      currentTool = 'blur';
+      selectedAnnotationIndex = -1;
+      canvas.classList.remove('select-mode', 'pen-mode', 'highlight-mode');
+      canvas.classList.add('blur-mode');
+      canvas.style.cursor = ''; // Let CSS class handle it
+
+      // Update button states
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.dropdown-toggle').forEach(b => b.classList.remove('active'));
+      blurDropdownToggle.classList.add('active');
+
+      // Toggle dropdown
+      blurDropdownMenu.classList.toggle('show');
+      // Close other dropdowns
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== blurDropdownMenu) menu.classList.remove('show');
+      });
+
+      // Hide color picker for blur tool
+      const colorGroup = document.querySelector('.color-group');
+      if (colorGroup) {
+        colorGroup.style.display = 'none';
+      }
+    });
+  }
+
+  // Blur intensity slider
+  if (blurIntensitySlider && blurIntensityDisplay) {
+    blurIntensitySlider.addEventListener('input', (e) => {
+      blurIntensity = parseInt(e.target.value);
+      blurIntensityDisplay.textContent = `${blurIntensity}px`;
+    });
+  }
+
+  // Blur effect type selector
+  const blurEffectTypeSelect = document.getElementById('blur-effect-type');
+  if (blurEffectTypeSelect) {
+    blurEffectTypeSelect.addEventListener('change', (e) => {
+      blurEffectType = e.target.value;
+    });
+  }
+
+  // Close all dropdowns when clicking outside
   documentClickHandler = (e) => {
-    if (!objectsDropdownToggle.contains(e.target) && !objectsDropdownMenu.contains(e.target)) {
-      objectsDropdownMenu.classList.remove('show');
+    const clickedInsideDropdown = e.target.closest('.dropdown-container');
+    if (!clickedInsideDropdown) {
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        menu.classList.remove('show');
+      });
     }
   };
   document.addEventListener('click', documentClickHandler);
   
-  // Tool selection (including dropdown items)
-  document.querySelectorAll('.tool-btn, .dropdown-item').forEach(btn => {
+  // Tool selection (simple tool buttons and shape dropdown items)
+  document.querySelectorAll('.tool-btn:not(.dropdown-toggle), .dropdown-item[data-tool]').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      // Don't handle clicks on dropdown toggle here
-      if (btn.id === 'objects-dropdown-toggle') {
-        return;
-      }
-      
       const tool = btn.dataset.tool;
       if (!tool) return;
-      
+
       // Update active states
-      document.querySelectorAll('.tool-btn').forEach(b => {
-        if (b.id !== 'objects-dropdown-toggle') {
-          b.classList.remove('active');
-        }
-      });
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.dropdown-toggle').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.dropdown-item').forEach(b => b.classList.remove('active'));
-      
+
       // Set active state
       if (btn.classList.contains('dropdown-item')) {
         btn.classList.add('active');
-        objectsDropdownToggle.classList.add('active');
-        objectsDropdownMenu.classList.remove('show');
+        // Activate the parent dropdown toggle
+        if (shapesDropdownToggle && btn.closest('#shapes-dropdown-menu')) {
+          shapesDropdownToggle.classList.add('active');
+        }
+        // Close dropdown
+        document.querySelectorAll('.dropdown-menu').forEach(menu => menu.classList.remove('show'));
       } else {
         btn.classList.add('active');
       }
-      
+
       currentTool = tool;
       selectedAnnotationIndex = -1;
       selectedArrowType = null;
-      selectedShapeType = null;
+      selectedEmoji = null;
       hoveredHandle = null;
       isTextEditing = false;
-      
+
       // Update canvas cursor
+      // Remove all tool mode classes
+      canvas.classList.remove('select-mode', 'pen-mode', 'highlight-mode', 'blur-mode');
+
       if (currentTool === 'select') {
         canvas.classList.add('select-mode');
         canvas.style.cursor = 'default';
       } else if (currentTool === 'text') {
-        canvas.classList.remove('select-mode');
         canvas.style.cursor = 'text';
+      } else if (currentTool === 'pen') {
+        canvas.classList.add('pen-mode');
+        canvas.style.cursor = ''; // Let CSS class handle it
+      } else if (currentTool === 'highlight') {
+        canvas.classList.add('highlight-mode');
+        canvas.style.cursor = ''; // Let CSS class handle it
+      } else if (currentTool === 'blur') {
+        canvas.classList.add('blur-mode');
+        canvas.style.cursor = ''; // Let CSS class handle it
       } else {
-        canvas.classList.remove('select-mode');
         canvas.style.cursor = 'crosshair';
       }
-      
+
       // Update color picker visibility (hide for blur tool)
       const colorGroup = document.querySelector('.color-group');
       if (colorGroup) {
         colorGroup.style.display = (currentTool === 'blur') ? 'none' : 'flex';
       }
-      
+
       redrawAnnotations();
     });
   });
 
-  // Arrow selection and image error handling
+  // Arrow selection from dropdown
+  document.querySelectorAll('.arrow-item[data-arrow]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const arrowType = e.currentTarget.dataset.arrow;
+
+      // Set arrow tool active
+      selectedArrowType = arrowType;
+      currentTool = 'arrow';
+      selectedAnnotationIndex = -1;
+
+      // Update active states
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.dropdown-toggle').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.dropdown-item').forEach(b => b.classList.remove('active'));
+
+      btn.classList.add('active');
+      if (arrowDropdownToggle) {
+        arrowDropdownToggle.classList.add('active');
+      }
+
+      // Close dropdown
+      if (arrowDropdownMenu) {
+        arrowDropdownMenu.classList.remove('show');
+      }
+
+      canvas.classList.remove('select-mode');
+      canvas.style.cursor = 'crosshair';
+      redrawAnnotations();
+    });
+  });
+
+  // Emoji selection from dropdown
+  document.querySelectorAll('.emoji-item[data-emoji]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const emoji = e.currentTarget.dataset.emoji;
+
+      // Set emoji tool active
+      selectedEmoji = emoji;
+      currentTool = 'emoji';
+      selectedAnnotationIndex = -1;
+
+      // Update active states
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.dropdown-toggle').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.dropdown-item').forEach(b => b.classList.remove('active'));
+
+      btn.classList.add('active');
+      if (emojiDropdownToggle) {
+        emojiDropdownToggle.classList.add('active');
+      }
+
+      // Close dropdown
+      if (emojiDropdownMenu) {
+        emojiDropdownMenu.classList.remove('show');
+      }
+
+      canvas.classList.remove('select-mode');
+      canvas.style.cursor = 'crosshair';
+      redrawAnnotations();
+    });
+  });
+
+  // Font family and size controls
+  const fontFamilySelect = document.getElementById('font-family-select');
+  const fontSizeSelect = document.getElementById('font-size-select');
+
+  if (fontFamilySelect) {
+    fontFamilySelect.addEventListener('change', (e) => {
+      // Update selected text annotation if any
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        if (annotation.type === 'text') {
+          annotation.fontFamily = e.target.value;
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  }
+
+  if (fontSizeSelect) {
+    fontSizeSelect.addEventListener('change', (e) => {
+      // Update selected text annotation if any
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        if (annotation.type === 'text') {
+          annotation.fontSize = parseInt(e.target.value);
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  }
+
+  // Crop button
+  const cropBtn = document.getElementById('cropBtn');
+  if (cropBtn) {
+    console.log('✓ Crop button found, attaching event listener');
+    cropBtn.addEventListener('click', (e) => {
+      console.log('Crop button clicked!');
+      e.preventDefault();
+      e.stopPropagation();
+      // Show crop overlay (reusing existing crop functionality)
+      try {
+        showCropOverlay();
+        console.log('✓ showCropOverlay() called successfully');
+      } catch (error) {
+        console.error('✗ Error calling showCropOverlay():', error);
+      }
+    });
+  } else {
+    console.error('✗ Crop button not found!');
+  }
+
+  // Zoom controls - will implement zoom functionality
+  let zoomLevel = 1.0;
+  const MIN_ZOOM = 0.5;
+  const MAX_ZOOM = 3.0;
+  const ZOOM_STEP = 0.25;
+
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const zoomDisplay = document.getElementById('zoom-display');
+
+  function updateZoomDisplay() {
+    if (zoomDisplay) {
+      zoomDisplay.textContent = `${Math.round(zoomLevel * 100)}%`;
+    }
+  }
+
+  function applyZoom() {
+    const container = document.querySelector('.screenshot-canvas-container');
+    if (container) {
+      container.style.transform = `scale(${zoomLevel})`;
+      container.style.transformOrigin = 'center center';
+    }
+    updateZoomDisplay();
+  }
+
+  if (zoomInBtn) {
+    zoomInBtn.addEventListener('click', () => {
+      zoomLevel = Math.min(zoomLevel + ZOOM_STEP, MAX_ZOOM);
+      applyZoom();
+    });
+  }
+
+  if (zoomOutBtn) {
+    zoomOutBtn.addEventListener('click', () => {
+      zoomLevel = Math.max(zoomLevel - ZOOM_STEP, MIN_ZOOM);
+      applyZoom();
+    });
+  }
+
+  // Continue with old arrow button code for backwards compatibility
   document.querySelectorAll('.arrow-btn').forEach(btn => {
     const img = btn.querySelector('.arrow-preview');
     if (img) {
@@ -1159,11 +1652,11 @@ function showAnnotationOverlay() {
         btn.style.fontWeight = 'bold';
       };
     }
-    
+
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const arrowType = e.currentTarget.dataset.arrow;
-      
+
       // Toggle arrow selection
       if (selectedArrowType === arrowType) {
         // Deselect if clicking same arrow
@@ -1306,25 +1799,69 @@ function showAnnotationOverlay() {
   };
   document.addEventListener('keydown', documentKeydownHandler);
   
-  // Action buttons
-  document.getElementById('copyBtn').addEventListener('click', copyToClipboard);
-  document.getElementById('clearBtn').addEventListener('click', clearAnnotations);
-  document.getElementById('saveAsBtn').addEventListener('click', showSaveAsDialog);
-  document.getElementById('closeBtn').addEventListener('click', closeOverlay);
-  
+  // Action buttons with null checks
+  const copyBtn = document.getElementById('copyBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const saveAsBtn = document.getElementById('saveAsBtn');
+  const closeBtn = document.getElementById('closeBtn');
+
+  console.log('Button elements found:', { copyBtn: !!copyBtn, clearBtn: !!clearBtn, saveAsBtn: !!saveAsBtn, closeBtn: !!closeBtn });
+
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      console.log('Copy button clicked');
+      copyToClipboard();
+    });
+  } else {
+    console.error('Copy button not found!');
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      console.log('Clear button clicked');
+      clearAnnotations();
+    });
+  } else {
+    console.error('Clear button not found!');
+  }
+
+  if (saveAsBtn) {
+    saveAsBtn.addEventListener('click', () => {
+      console.log('Save button clicked');
+      showSaveAsDialog();
+    });
+  } else {
+    console.error('Save button not found!');
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      console.log('Close button clicked');
+      closeOverlay();
+    });
+  } else {
+    console.error('Close button not found!');
+  }
+
   // Initialize history with initial state
   saveState();
-  
-  // Filename input handlers
-  document.getElementById('filename-confirm').addEventListener('click', confirmSaveAs);
-  document.getElementById('filename-cancel').addEventListener('click', cancelSaveAs);
-  document.getElementById('filename-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      confirmSaveAs();
-    } else if (e.key === 'Escape') {
-      cancelSaveAs();
-    }
-  });
+
+  // Filename input handlers with null checks
+  const filenameConfirm = document.getElementById('filename-confirm');
+  const filenameCancel = document.getElementById('filename-cancel');
+  const filenameInput = document.getElementById('filename-input');
+
+  if (filenameConfirm) filenameConfirm.addEventListener('click', confirmSaveAs);
+  if (filenameCancel) filenameCancel.addEventListener('click', cancelSaveAs);
+  if (filenameInput) {
+    filenameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        confirmSaveAs();
+      } else if (e.key === 'Escape') {
+        cancelSaveAs();
+      }
+    });
+  }
 
   // Settings modal functionality
   loadKeyboardShortcuts();
@@ -1384,28 +1921,99 @@ function setupSettingsModal() {
   const saveBtn = document.getElementById('settings-save-btn');
   const resetBtn = document.getElementById('settings-reset-btn');
 
+  console.log('Settings elements found:', {
+    settingsBtn: !!settingsBtn,
+    settingsModal: !!settingsModal,
+    closeBtn: !!closeBtn,
+    saveBtn: !!saveBtn,
+    resetBtn: !!resetBtn
+  });
+
+  if (!settingsBtn || !settingsModal || !closeBtn || !saveBtn || !resetBtn) {
+    console.error('Settings modal elements not found:', {
+      settingsBtn: !!settingsBtn,
+      settingsModal: !!settingsModal,
+      closeBtn: !!closeBtn,
+      saveBtn: !!saveBtn,
+      resetBtn: !!resetBtn
+    });
+    return;
+  }
+
   // Open settings
   settingsBtn.addEventListener('click', () => {
+    console.log('Settings button clicked - opening modal with bulletproof method');
+
+    // Method 1: Use cssText for highest priority
+    settingsModal.style.cssText = `
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: rgba(0, 0, 0, 0.8) !important;
+      z-index: 10000000 !important;
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', sans-serif !important;
+    `;
+
+    // Add the show class for CSS compatibility
     settingsModal.classList.add('show');
-    updateShortcutInputs();
+
+    // Force reflow to ensure rendering
+    void settingsModal.offsetHeight;
+
+    // Use requestAnimationFrame to ensure paint happens
+    requestAnimationFrame(() => {
+      console.log('Settings modal shown, updating shortcuts');
+      updateShortcutInputs();
+
+      // Verify rendering after paint
+      requestAnimationFrame(() => {
+        const computedStyle = window.getComputedStyle(settingsModal);
+        const rect = settingsModal.getBoundingClientRect();
+        console.log('Settings modal computed styles:', {
+          display: computedStyle.display,
+          zIndex: computedStyle.zIndex,
+          visibility: computedStyle.visibility,
+          opacity: computedStyle.opacity,
+          position: computedStyle.position,
+          width: computedStyle.width,
+          height: computedStyle.height,
+          boundingRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          classList: Array.from(settingsModal.classList)
+        });
+      });
+    });
   });
+
+  // Helper function to properly hide settings modal
+  function hideSettingsModal() {
+    settingsModal.classList.remove('show');
+    settingsModal.style.cssText = settingsModal.style.cssText.replace('display: flex !important;', 'display: none !important;');
+  }
 
   // Close settings
   closeBtn.addEventListener('click', () => {
-    settingsModal.classList.remove('show');
+    hideSettingsModal();
   });
 
   // Close on background click
   settingsModal.addEventListener('click', (e) => {
     if (e.target === settingsModal) {
-      settingsModal.classList.remove('show');
+      hideSettingsModal();
     }
   });
 
   // Save shortcuts
   saveBtn.addEventListener('click', () => {
     saveKeyboardShortcuts();
-    settingsModal.classList.remove('show');
+    hideSettingsModal();
     alert('Keyboard shortcuts saved!');
   });
 
@@ -1524,8 +2132,36 @@ function getAnnotationBounds(annotation) {
       rotation: annotation.rotation || 0
     };
   }
+
+  if (annotation.type === 'emoji') {
+    // Emoji is similar to text but with fixed square bounds
+    const size = annotation.fontSize || 40;
+    return {
+      x: annotation.x,
+      y: annotation.y,
+      width: size + 10,
+      height: size + 10,
+      rotation: annotation.rotation || 0
+    };
+  }
   
-  if (annotation.type === 'rectangle' || annotation.type === 'circle' || annotation.type === 'blur') {
+  if (annotation.type === 'line') {
+    // Calculate bounds from line endpoints
+    const minX = Math.min(annotation.x, annotation.x2 || annotation.x);
+    const minY = Math.min(annotation.y, annotation.y2 || annotation.y);
+    const maxX = Math.max(annotation.x, annotation.x2 || annotation.x);
+    const maxY = Math.max(annotation.y, annotation.y2 || annotation.y);
+    return {
+      x: minX,
+      y: minY,
+      width: Math.max(maxX - minX, 10),
+      height: Math.max(maxY - minY, 10),
+      rotation: annotation.rotation || 0
+    };
+  }
+
+  if (annotation.type === 'rectangle' || annotation.type === 'circle' || annotation.type === 'blur' ||
+      annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle') {
     return {
       x: annotation.x,
       y: annotation.y,
@@ -1689,7 +2325,7 @@ function handleMouseDown(e) {
           annotation.startY = bounds.y;
           annotation.startWidth = bounds.width;
           annotation.startHeight = bounds.height;
-          // Store original font size for text resizing
+          // Store original font size for text and emoji resizing
           if (annotation.type === 'text') {
             annotation.startFontSize = annotation.fontSize || 20;
             // Recalculate text bounds to match current font size
@@ -1707,6 +2343,9 @@ function handleMouseDown(e) {
               annotation.startWidth = Math.max(annotation.startWidth, maxWidth + 20);
               annotation.startHeight = Math.max(annotation.startHeight, (annotation.fontSize * lines.length * 1.5));
             }
+          }
+          if (annotation.type === 'emoji') {
+            annotation.startFontSize = annotation.fontSize || 40;
           }
           return;
         }
@@ -1761,9 +2400,30 @@ function handleMouseDown(e) {
     }
   }
   
-  // Arrow tool uses click handler, not mousedown
-  if (currentTool === 'arrow') {
-    e.stopPropagation();
+  // Arrow tool - start drag-to-create (like shapes)
+  if (currentTool === 'arrow' && selectedArrowType) {
+    if (isSelectingArea) {
+      cancelAreaSelection();
+    }
+
+    isDrawingShape = true;
+    shapeStartX = x;
+    shapeStartY = y;
+
+    const arrowAnnotation = {
+      type: 'arrow',
+      x: x,
+      y: y,
+      width: 0,
+      height: 0,
+      arrowImage: selectedArrowType,
+      color: selectedColor,
+      rotation: 0
+    };
+
+    annotations.push(arrowAnnotation);
+    selectedAnnotationIndex = annotations.length - 1;
+    // Don't save state here - will save when drag is complete
     return;
   }
   
@@ -1794,6 +2454,12 @@ function handleMouseDown(e) {
     }
     
     // Create new text annotation
+    // Get current font settings from dropdowns
+    const fontFamilySelectEl = document.getElementById('font-family-select');
+    const fontSizeSelectEl = document.getElementById('font-size-select');
+    const currentFontFamily = fontFamilySelectEl ? fontFamilySelectEl.value : 'Arial';
+    const currentFontSize = fontSizeSelectEl ? parseInt(fontSizeSelectEl.value) : 24;
+
     const textAnnotation = {
       type: 'text',
       x: x,
@@ -1801,8 +2467,8 @@ function handleMouseDown(e) {
       width: 80,  // Smaller initial width, will auto-expand based on text
       height: 40, // Taller for better selection handles
       text: 'Text',
-      fontSize: 24, // Larger default font for better visibility
-      fontFamily: 'Arial',
+      fontSize: currentFontSize,
+      fontFamily: currentFontFamily,
       color: selectedColor,
       rotation: 0
     };
@@ -1817,17 +2483,46 @@ function handleMouseDown(e) {
     return;
   }
   
-  // Rectangle and Circle tools - start drawing
-  if (currentTool === 'rectangle' || currentTool === 'circle') {
+  // Line tool - start drawing
+  if (currentTool === 'line') {
     // Make sure we're not in area selection mode
     if (isSelectingArea) {
       cancelAreaSelection();
     }
-    
+
     isDrawingShape = true;
     shapeStartX = x;
     shapeStartY = y;
-    
+
+    const lineAnnotation = {
+      type: 'line',
+      x: x,
+      y: y,
+      x2: x,
+      y2: y,
+      color: selectedColor,
+      strokeWidth: 3,
+      rotation: 0
+    };
+
+    annotations.push(lineAnnotation);
+    selectedAnnotationIndex = annotations.length - 1;
+    // Don't save state here - will save when line drawing is complete
+    return;
+  }
+
+  // Rectangle and Circle tools - start drawing
+  if (currentTool === 'rectangle' || currentTool === 'circle' ||
+      currentTool === 'filled-rectangle' || currentTool === 'filled-circle') {
+    // Make sure we're not in area selection mode
+    if (isSelectingArea) {
+      cancelAreaSelection();
+    }
+
+    isDrawingShape = true;
+    shapeStartX = x;
+    shapeStartY = y;
+
     const shapeAnnotation = {
       type: currentTool,
       x: x,
@@ -1838,7 +2533,7 @@ function handleMouseDown(e) {
       strokeWidth: 3,
       rotation: 0
     };
-    
+
     annotations.push(shapeAnnotation);
     selectedAnnotationIndex = annotations.length - 1;
     // Don't save state here - will save when shape drawing is complete
@@ -1862,7 +2557,8 @@ function handleMouseDown(e) {
       y: y,
       width: 0,
       height: 0,
-      blurRadius: 10, // Default blur radius
+      blurRadius: blurIntensity, // Use blur intensity from slider
+      blurEffect: blurEffectType, // 'blur' or 'pixelate'
       rotation: 0
     };
 
@@ -1908,7 +2604,7 @@ function handleMouseDown(e) {
       type: 'highlight',
       points: currentHighlightPoints,
       color: selectedColor,
-      strokeWidth: selectedStrokeWidth * 3, // Thicker than pen by default
+      strokeWidth: highlightBrushSize, // Use highlight brush size from slider
       rotation: 0
     };
 
@@ -2045,8 +2741,8 @@ function handleMouseMove(e) {
       annotation.height = Math.max(annotation.height, 20);
     }
     
-    // For circles, maintain circular shape
-    if (annotation.type === 'circle') {
+    // For circles (outline and filled), maintain circular shape
+    if (annotation.type === 'circle' || annotation.type === 'filled-circle') {
       const avgSize = (annotation.width + annotation.height) / 2;
       annotation.width = avgSize;
       annotation.height = avgSize;
@@ -2057,12 +2753,12 @@ function handleMouseMove(e) {
       // Ensure minimum dimensions
       annotation.width = Math.max(annotation.width, 30);
       annotation.height = Math.max(annotation.height, 15);
-      
+
       // Scale font size proportionally to width change (no hard limits)
       if (annotation.startWidth > 0 && annotation.startFontSize) {
         const scaleFactor = annotation.width / annotation.startWidth;
         annotation.fontSize = Math.max(8, (annotation.startFontSize * scaleFactor));
-        
+
         // Recalculate actual text bounds based on new font size
         const canvas = document.getElementById('annotation-canvas');
         if (canvas) {
@@ -2080,6 +2776,19 @@ function handleMouseMove(e) {
         }
       }
     }
+
+    // For emoji, scale font size proportionally
+    if (annotation.type === 'emoji') {
+      const avgSize = (annotation.width + annotation.height) / 2;
+      annotation.width = avgSize;
+      annotation.height = avgSize;
+
+      // Scale font size based on size change
+      if (annotation.startWidth > 0 && annotation.startFontSize) {
+        const scaleFactor = avgSize / annotation.startWidth;
+        annotation.fontSize = Math.max(12, annotation.startFontSize * scaleFactor);
+      }
+    }
     
     // Show dimension display
     const bounds = getAnnotationBounds(annotation);
@@ -2088,18 +2797,34 @@ function handleMouseMove(e) {
     return;
   }
   
-  // Handle shape drawing (rectangle/circle/blur)
+  // Handle shape drawing (rectangle/circle/blur/filled-rectangle/filled-circle)
   if (isDrawingShape && selectedAnnotationIndex >= 0) {
     const annotation = annotations[selectedAnnotationIndex];
-    const minX = Math.min(shapeStartX, currentX);
-    const minY = Math.min(shapeStartY, currentY);
-    const maxX = Math.max(shapeStartX, currentX);
-    const maxY = Math.max(shapeStartY, currentY);
 
-    annotation.x = minX;
-    annotation.y = minY;
-    annotation.width = maxX - minX;
-    annotation.height = maxY - minY;
+    // Line tool uses x,y,x2,y2 instead of x,y,width,height
+    if (annotation.type === 'line') {
+      annotation.x2 = currentX;
+      annotation.y2 = currentY;
+    } else {
+      // Rectangle, circle, blur, filled shapes, arrows use x,y,width,height
+      const minX = Math.min(shapeStartX, currentX);
+      const minY = Math.min(shapeStartY, currentY);
+      const maxX = Math.max(shapeStartX, currentX);
+      const maxY = Math.max(shapeStartY, currentY);
+
+      annotation.x = minX;
+      annotation.y = minY;
+      annotation.width = maxX - minX;
+      annotation.height = maxY - minY;
+
+      // For arrows, maintain aspect ratio based on original arrow image
+      if (annotation.type === 'arrow') {
+        // Use the larger dimension to maintain visibility
+        const size = Math.max(annotation.width, annotation.height);
+        annotation.width = size;
+        annotation.height = size;
+      }
+    }
 
     redrawAnnotations();
     return;
@@ -2285,84 +3010,35 @@ function handleCanvasClick(e) {
     return;
   }
   
-  if (currentTool === 'arrow' && selectedArrowType) {
+  // Arrow tool now uses drag-to-create (handled in handleMouseDown/Move/Up)
+  // Old click-to-place behavior removed in favor of professional drag-to-create workflow
+
+  if (currentTool === 'emoji' && selectedEmoji) {
     e.preventDefault();
     e.stopPropagation();
-    
+
     const rect = e.target.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
-    // Check if clicking on an existing annotation first
-    let clickedAnnotation = -1;
-    for (let i = annotations.length - 1; i >= 0; i--) {
-      const bounds = getAnnotationBounds(annotations[i]);
-      if (bounds && pointInBounds(x, y, bounds)) {
-        clickedAnnotation = i;
-        break;
-      }
-    }
-    
-    // If clicked on existing annotation, select it instead of adding new one
-    if (clickedAnnotation >= 0) {
-      currentTool = 'select';
-      selectedAnnotationIndex = clickedAnnotation;
-      selectedArrowType = null;
-      // Update UI
-      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.arrow-btn').forEach(b => b.classList.remove('active'));
-      const selectBtn = document.querySelector('[data-tool="select"]');
-      if (selectBtn) selectBtn.classList.add('active');
-      const canvas = document.getElementById('annotation-canvas');
-      if (canvas) canvas.classList.add('select-mode');
-      redrawAnnotations();
-      return;
-    }
-    
-    // Capture arrow type before switching tools (switchToSelectTool sets selectedArrowType to null)
-    const arrowType = selectedArrowType;
 
-    // Add new arrow annotation with selected arrow type and color
+    // Capture emoji before switching tools
+    const emoji = selectedEmoji;
+
+    // Add new emoji annotation
     annotations.push({
-      type: 'arrow',
-      x: x - 25,
-      y: y - 25,
-      width: 50,
-      height: 50,
-      arrowImage: arrowType,
-      color: selectedColor, // Use the selected color from color picker
+      type: 'emoji',
+      emoji: emoji,
+      x: x - 20,
+      y: y - 20,
+      fontSize: 40,
       rotation: 0
     });
 
     selectedAnnotationIndex = annotations.length - 1;
-    saveState(); // Save state after adding arrow
+    saveState(); // Save state after adding emoji
 
-    // Switch to Select tool after adding arrow
+    // Switch to Select tool after adding emoji
     switchToSelectTool();
-
-    // Ensure the arrow image is loaded
-    const arrowImg = arrowImageCache[arrowType];
-    if (!arrowImg || !arrowImg.complete || arrowImg.naturalWidth === 0) {
-      // Load the image if not already loaded
-      const newImg = new Image();
-      newImg.onload = () => {
-        arrowImageCache[arrowType] = newImg;
-        console.log(`Arrow loaded when placing: ${arrowType}`);
-        // Force redraw
-        requestAnimationFrame(() => {
-          redrawAnnotations();
-        });
-      };
-      newImg.onerror = (e) => {
-        console.error(`Failed to load arrow: ${arrowType}`, e);
-        const url = getArrowImageURL(arrowType);
-        console.error(`URL attempted: ${url}`);
-      };
-      const url = getArrowImageURL(arrowType);
-      console.log(`Loading arrow for placement: ${arrowType} from ${url}`);
-      newImg.src = url;
-      arrowImageCache[arrowType] = newImg;
-    }
 
     redrawAnnotations();
   }
@@ -2593,11 +3269,39 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
     return true;
   }
 
+  // Draw emoji
+  if (annotation.type === 'emoji') {
+    ctx.font = `${annotation.fontSize || 40}px Arial`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(annotation.emoji || '😀', bounds.x, bounds.y);
+    return true;
+  }
+
+  // Draw line
+  if (annotation.type === 'line') {
+    ctx.beginPath();
+    ctx.strokeStyle = annotation.color || '#FF0000';
+    ctx.lineWidth = annotation.strokeWidth || 3;
+    ctx.lineCap = 'round';
+    ctx.moveTo(annotation.x, annotation.y);
+    ctx.lineTo(annotation.x2 || annotation.x, annotation.y2 || annotation.y);
+    ctx.stroke();
+    return true;
+  }
+
   // Draw rectangle
   if (annotation.type === 'rectangle') {
     ctx.strokeStyle = annotation.color || '#FF0000';
     ctx.lineWidth = annotation.strokeWidth || 3;
     ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    return true;
+  }
+
+  // Draw filled rectangle
+  if (annotation.type === 'filled-rectangle') {
+    ctx.fillStyle = annotation.color || '#FF0000';
+    ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
     return true;
   }
 
@@ -2613,6 +3317,20 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
     ctx.strokeStyle = annotation.color || '#FF0000';
     ctx.lineWidth = annotation.strokeWidth || 3;
     ctx.stroke();
+    return true;
+  }
+
+  // Draw filled circle
+  if (annotation.type === 'filled-circle') {
+    const radiusX = bounds.width / 2;
+    const radiusY = bounds.height / 2;
+    const cx = bounds.x + radiusX;
+    const cy = bounds.y + radiusY;
+
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.fillStyle = annotation.color || '#FF0000';
+    ctx.fill();
     return true;
   }
 
@@ -2826,6 +3544,42 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     return;
   }
 
+  if (annotation.type === 'line') {
+    renderAnnotationShape(ctx, annotation, bounds);
+    ctx.restore();
+    if (isSelected) {
+      drawSelectionHandles(ctx, bounds);
+    }
+    return;
+  }
+
+  if (annotation.type === 'filled-rectangle') {
+    renderAnnotationShape(ctx, annotation, bounds);
+    ctx.restore();
+    if (isSelected) {
+      drawSelectionHandles(ctx, bounds);
+    }
+    return;
+  }
+
+  if (annotation.type === 'filled-circle') {
+    renderAnnotationShape(ctx, annotation, bounds);
+    ctx.restore();
+    if (isSelected) {
+      drawSelectionHandles(ctx, bounds);
+    }
+    return;
+  }
+
+  if (annotation.type === 'emoji') {
+    renderAnnotationShape(ctx, annotation, bounds);
+    ctx.restore();
+    if (isSelected) {
+      drawSelectionHandles(ctx, bounds);
+    }
+    return;
+  }
+
   if (annotation.type === 'freehand' || annotation.type === 'highlight') {
     renderAnnotationShape(ctx, annotation, bounds);
     ctx.restore();
@@ -2907,15 +3661,44 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
       return;
     }
     
-    // Apply blur effect using CSS filter on the annotation canvas context
+    // Apply effect based on type
     const blurRadius = annotation.blurRadius || 10;
-    ctx.filter = `blur(${blurRadius}px)`;
-    
-    // Draw the temp canvas (with source image) to annotation canvas with blur filter
-    ctx.drawImage(tempCanvas, bounds.x, bounds.y, bounds.width, bounds.height);
-    
-    // Reset filter
-    ctx.filter = 'none';
+    const effectType = annotation.blurEffect || 'blur';
+
+    if (effectType === 'pixelate') {
+      // Pixelate effect: downscale then upscale with no smoothing
+      const pixelSize = Math.max(5, Math.floor(blurRadius / 2)); // Convert blur radius to pixel size
+      const pixelCanvas = document.createElement('canvas');
+      const pixelWidth = Math.max(1, Math.floor(bounds.width / pixelSize));
+      const pixelHeight = Math.max(1, Math.floor(bounds.height / pixelSize));
+      pixelCanvas.width = pixelWidth;
+      pixelCanvas.height = pixelHeight;
+      const pixelCtx = pixelCanvas.getContext('2d');
+
+      // Disable image smoothing for blocky pixels
+      pixelCtx.imageSmoothingEnabled = false;
+
+      // Draw temp canvas to tiny size (downscale)
+      pixelCtx.drawImage(tempCanvas, 0, 0, pixelWidth, pixelHeight);
+
+      // Disable smoothing on main context too
+      ctx.imageSmoothingEnabled = false;
+
+      // Draw tiny canvas back at full size (upscale = pixelated)
+      ctx.drawImage(pixelCanvas, bounds.x, bounds.y, bounds.width, bounds.height);
+
+      // Re-enable smoothing
+      ctx.imageSmoothingEnabled = true;
+    } else {
+      // Smooth blur effect using CSS filter
+      ctx.filter = `blur(${blurRadius}px)`;
+
+      // Draw the temp canvas (with source image) to annotation canvas with blur filter
+      ctx.drawImage(tempCanvas, bounds.x, bounds.y, bounds.width, bounds.height);
+
+      // Reset filter
+      ctx.filter = 'none';
+    }
     
     // Draw border to show blur area (only when not selected, selection handles will show border)
     if (!isSelected) {
@@ -3262,33 +4045,96 @@ function clearAnnotations() {
 }
 
 function showSaveAsDialog() {
+  console.log('showSaveAsDialog called');
   const container = document.getElementById('filename-input-container');
   const input = document.getElementById('filename-input');
-  
+
+  console.log('Save dialog elements:', { container: !!container, input: !!input });
+
+  if (!container || !input) {
+    console.error('Save dialog elements not found!');
+    return;
+  }
+
   // Generate default filename with timestamp
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
   const timeStr = now.toTimeString().slice(0, 5).replace(/:/g, '');
   const defaultName = `screenshot-${dateStr}-${timeStr}`;
   input.value = defaultName;
-  
-  container.style.display = 'flex';
-  input.focus();
-  input.select();
+
+  console.log('Showing save dialog with bulletproof method');
+
+  // Method 1: Use cssText for highest priority
+  container.style.cssText = `
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    z-index: 10000000 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    background: linear-gradient(to bottom, #363636, #2d2d2d) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    padding: 24px !important;
+    border-radius: 16px !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+    gap: 16px !important;
+    min-width: 350px !important;
+    backdrop-filter: blur(20px) !important;
+  `;
+
+  // Force reflow to ensure rendering
+  void container.offsetHeight;
+
+  // Use requestAnimationFrame to ensure paint happens
+  requestAnimationFrame(() => {
+    console.log('Dialog shown, focus and select input');
+    input.focus();
+    input.select();
+
+    // Verify rendering after paint
+    requestAnimationFrame(() => {
+      const computedStyle = window.getComputedStyle(container);
+      const rect = container.getBoundingClientRect();
+      console.log('Save dialog computed styles:', {
+        display: computedStyle.display,
+        zIndex: computedStyle.zIndex,
+        visibility: computedStyle.visibility,
+        opacity: computedStyle.opacity,
+        position: computedStyle.position,
+        top: computedStyle.top,
+        left: computedStyle.left,
+        transform: computedStyle.transform,
+        boundingRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      });
+    });
+  });
 }
 
 function cancelSaveAs() {
-  document.getElementById('filename-input-container').style.display = 'none';
+  const container = document.getElementById('filename-input-container');
+  if (container) {
+    container.style.cssText = container.style.cssText.replace('display: flex !important;', 'display: none !important;');
+  }
 }
 
 function confirmSaveAs() {
   const input = document.getElementById('filename-input');
+  const container = document.getElementById('filename-input-container');
   const filename = input.value.trim() || 'screenshot-annotated';
-  
+
   // Ensure filename has .png extension
   const finalFilename = filename.endsWith('.png') ? filename : filename + '.png';
-  
-  document.getElementById('filename-input-container').style.display = 'none';
+
+  // Properly hide the dialog
+  if (container) {
+    container.style.cssText = container.style.cssText.replace('display: flex !important;', 'display: none !important;');
+  }
+
   saveScreenshot(finalFilename);
 }
 
@@ -3566,10 +4412,10 @@ function copyToClipboard() {
 function showCopyFeedback(message) {
   const copyBtn = document.getElementById('copyBtn');
   if (copyBtn) {
-    const originalText = copyBtn.textContent;
-    copyBtn.textContent = message;
+    const originalHTML = copyBtn.innerHTML;
+    copyBtn.innerHTML = `<span style="font-size: 11px;">${message}</span>`;
     setTimeout(() => {
-      copyBtn.textContent = originalText;
+      copyBtn.innerHTML = originalHTML;
     }, 1500);
   }
 }

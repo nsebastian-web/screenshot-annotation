@@ -1,5 +1,43 @@
 // Background service worker for screenshot extension
 
+// Handle keyboard command
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'capture-screenshot') {
+    // Get the active tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (tab) {
+      // Check if we're on a restricted page
+      if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('edge://'))) {
+        console.log('Cannot capture on chrome:// pages');
+        return;
+      }
+
+      try {
+        // Inject content script if not already injected
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+
+        // Inject CSS
+        await chrome.scripting.insertCSS({
+          target: { tabId: tab.id },
+          files: ['content.css']
+        });
+
+        // Wait a bit for script to initialize
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Send message to start capture
+        await chrome.tabs.sendMessage(tab.id, { action: 'startCapture' });
+      } catch (error) {
+        console.error('Error starting capture:', error);
+      }
+    }
+  }
+});
+
 chrome.action.onClicked.addListener(async (tab) => {
   // This will be handled by the popup, but keeping for direct action support
 });
