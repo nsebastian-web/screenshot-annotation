@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Screenshot & Annotation Tool",
-  "version": "1.0.0",
-  "description": "Take screenshots and add annotations with arrows, text, and shapes",
+  "version": "4.0.0",
+  "description": "Professional screenshot tool with advanced annotations, opacity control, text formatting, numbered callouts, and multi-format export (PNG/JPG/PDF)",
   "permissions": [
     "activeTab",
     "storage",

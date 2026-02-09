@@ -71,8 +71,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Convert base64 to data URL and download
     // Note: Service workers don't support URL.createObjectURL, so we use data URL instead
     try {
-      const dataUrl = 'data:image/png;base64,' + request.data;
-      
+      // Determine MIME type from filename extension
+      let mimeType = 'image/png';
+      if (request.filename) {
+        if (request.filename.endsWith('.jpg') || request.filename.endsWith('.jpeg')) {
+          mimeType = 'image/jpeg';
+        } else if (request.filename.endsWith('.pdf')) {
+          mimeType = 'application/pdf';
+        }
+      }
+
+      const dataUrl = `data:${mimeType};base64,` + request.data;
+
       // Use chrome.downloads API for Save As dialog
       chrome.downloads.download({
         url: dataUrl,
@@ -103,5 +113,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       'arrow4.png'
     ];
     sendResponse({ arrows });
+  }
+
+  if (request.action === 'getCaptureShortcut') {
+    // Get the current capture screenshot shortcut
+    chrome.commands.getAll((commands) => {
+      const captureCommand = commands.find(cmd => cmd.name === 'capture-screenshot');
+      if (captureCommand) {
+        sendResponse({ success: true, shortcut: captureCommand.shortcut || '' });
+      } else {
+        sendResponse({ success: false, error: 'Command not found' });
+      }
+    });
+    return true; // Keep channel open for async response
+  }
+
+  if (request.action === 'updateCaptureShortcut') {
+    // Update the capture screenshot shortcut
+    chrome.commands.update({
+      name: 'capture-screenshot',
+      shortcut: request.shortcut
+    }, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true });
+      }
+    });
+    return true; // Keep channel open for async response
   }
 });

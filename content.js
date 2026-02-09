@@ -32,6 +32,21 @@ let blurIntensity = 10; // Default blur intensity/radius
 let blurEffectType = 'blur'; // Default blur effect type ('blur' or 'pixelate')
 let isTextEditing = false; // Track if text is being edited
 
+// v3.0 Enhancement variables
+let selectedOpacity = 1.0; // Default opacity (1.0 = 100%)
+let colorPresets = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#000000', '#FFFFFF']; // Default color palette
+let recentColors = []; // Recently used colors
+let calloutCounter = 1; // Counter for numbered callouts
+let savedTemplates = []; // Saved annotation templates
+let lineArrowStart = false; // Whether line has arrow at start
+let lineArrowEnd = true; // Whether line has arrow at end (default true for arrow lines)
+let selectedTextBold = false; // Text formatting: bold
+let selectedTextItalic = false; // Text formatting: italic
+let selectedTextUnderline = false; // Text formatting: underline
+
+// Platform detection
+const isMac = navigator.userAgent.toUpperCase().indexOf('MAC') >= 0;
+
 // Default keyboard shortcuts configuration
 const DEFAULT_SHORTCUTS = {
   selectTool: 'v',
@@ -926,12 +941,25 @@ function showAnnotationOverlay() {
             <button class="tool-btn dropdown-toggle" id="shapes-dropdown-toggle" title="Shapes">
               ${getIcon('shapes', 16)}
             </button>
-            <div class="dropdown-menu dropdown-horizontal" id="shapes-dropdown-menu">
+            <div class="dropdown-menu dropdown-horizontal" id="shapes-dropdown-menu" style="min-width: 220px;">
               <button class="dropdown-item" data-tool="line" title="Line">—</button>
               <button class="dropdown-item" data-tool="rectangle" title="Rectangle">▭</button>
               <button class="dropdown-item" data-tool="filled-rectangle" title="Filled Rectangle">◼</button>
               <button class="dropdown-item" data-tool="circle" title="Circle">○</button>
               <button class="dropdown-item" data-tool="filled-circle" title="Filled Circle">●</button>
+              <div class="dropdown-section" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a;">
+                <label style="font-size: 10px; color: #aaa; margin-bottom: 4px;">Line Arrows</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <label style="display: flex; align-items: center; gap: 4px; font-size: 11px;">
+                    <input type="checkbox" id="line-arrow-start" style="cursor: pointer;" />
+                    <span>Start</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 4px; font-size: 11px;">
+                    <input type="checkbox" id="line-arrow-end" checked style="cursor: pointer;" />
+                    <span>End</span>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1012,6 +1040,14 @@ function showAnnotationOverlay() {
                   <option value="144">144px</option>
                 </select>
               </div>
+              <div class="dropdown-section" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a;">
+                <label>Text Style</label>
+                <div style="display: flex; gap: 4px;">
+                  <button class="format-btn" id="text-bold-btn" title="Bold" style="font-weight: bold; width: 32px; padding: 4px; background: #2d2d2d; color: #fff; border: 1px solid #4a4a4a; border-radius: 4px; cursor: pointer;">B</button>
+                  <button class="format-btn" id="text-italic-btn" title="Italic" style="font-style: italic; width: 32px; padding: 4px; background: #2d2d2d; color: #fff; border: 1px solid #4a4a4a; border-radius: 4px; cursor: pointer;">I</button>
+                  <button class="format-btn" id="text-underline-btn" title="Underline" style="text-decoration: underline; width: 32px; padding: 4px; background: #2d2d2d; color: #fff; border: 1px solid #4a4a4a; border-radius: 4px; cursor: pointer;">U</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1037,6 +1073,11 @@ function showAnnotationOverlay() {
             </div>
           </div>
 
+          <!-- Numbered Callout Tool -->
+          <button class="tool-btn" data-tool="callout" title="Numbered Callout">
+            <span style="font-weight: bold; font-size: 14px;">①</span>
+          </button>
+
           <!-- Crop Tool -->
           <button class="tool-btn" id="cropBtn" title="Crop">
             ${getIcon('crop', 16)}
@@ -1054,10 +1095,29 @@ function showAnnotationOverlay() {
           </button>
         </div>
 
-        <!-- Color Picker -->
+        <!-- Color Picker & Palette -->
         <div class="color-group">
           <label for="color-picker" class="color-label">Color:</label>
           <input type="color" id="color-picker" value="${selectedColor}" />
+          <div class="color-palette" id="color-palette">
+            ${colorPresets.map(color => `<button class="color-preset-btn" data-color="${color}" style="background:${color};" title="${color}"></button>`).join('')}
+          </div>
+        </div>
+
+        <!-- Opacity Slider -->
+        <div class="opacity-group">
+          <label for="opacity-slider" class="opacity-label">Opacity:</label>
+          <input type="range" id="opacity-slider" min="0" max="100" value="100" step="5" />
+          <span id="opacity-display">100%</span>
+        </div>
+
+        <!-- Stroke Width Presets -->
+        <div class="stroke-width-group">
+          <label class="stroke-label">Width:</label>
+          <button class="stroke-btn" data-width="1" title="Extra Small (1px)">S</button>
+          <button class="stroke-btn" data-width="3" title="Small (3px)">M</button>
+          <button class="stroke-btn active" data-width="5" title="Medium (5px)">L</button>
+          <button class="stroke-btn" data-width="8" title="Large (8px)">XL</button>
         </div>
 
         <!-- Action Buttons -->
@@ -1074,12 +1134,31 @@ function showAnnotationOverlay() {
           <button class="action-btn" id="clearBtn" title="Clear All">
             ${getIcon('clear', 14)} Clear
           </button>
-          <button class="action-btn" id="saveAsBtn" title="Save">
-            ${getIcon('save', 14)} Save
-          </button>
+          <div class="dropdown-container">
+            <button class="action-btn dropdown-toggle" id="save-dropdown-toggle" title="Save">
+              ${getIcon('save', 14)} Save
+            </button>
+            <div class="dropdown-menu" id="save-dropdown-menu" style="min-width: 150px;">
+              <button class="dropdown-item" id="save-png-btn" title="Save as PNG">💾 Save as PNG</button>
+              <button class="dropdown-item" id="save-jpg-btn" title="Save as JPG">🖼️ Save as JPG</button>
+              <button class="dropdown-item" id="save-pdf-btn" title="Save as PDF">📄 Save as PDF</button>
+            </div>
+          </div>
           <button class="action-btn" id="closeBtn" title="Close">
             ${getIcon('close', 14)}
           </button>
+        </div>
+
+        <!-- Templates Button -->
+        <div class="dropdown-container">
+          <button class="action-btn icon-btn dropdown-toggle" id="templates-dropdown-toggle" title="Templates">
+            📋
+          </button>
+          <div class="dropdown-menu" id="templates-dropdown-menu" style="min-width: 180px;">
+            <button class="dropdown-item" id="save-template-btn" title="Save as Template">💾 Save Template</button>
+            <button class="dropdown-item" id="load-template-btn" title="Load Template">📂 Load Template</button>
+            <div id="template-list" style="max-height: 150px; overflow-y: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a;"></div>
+          </div>
         </div>
 
         <!-- Settings Button -->
@@ -1177,6 +1256,16 @@ function showAnnotationOverlay() {
             <label>Deselect (Escape)</label>
             <input type="text" id="shortcut-escape" class="shortcut-input" placeholder="Escape" readonly />
           </div>
+        </div>
+        <div class="settings-section">
+          <h3>Global Shortcuts</h3>
+          <div class="shortcut-row">
+            <label>📸 Capture Screenshot</label>
+            <input type="text" id="shortcut-capture" class="shortcut-input" placeholder="Ctrl+Shift+S" readonly />
+          </div>
+          <p class="shortcut-help">
+            <small>💡 Click the input field and press your desired key combination (e.g., Ctrl+Shift+X, Alt+S, etc.)</small>
+          </p>
         </div>
         <div class="settings-section">
           <h3>Movement</h3>
@@ -1581,6 +1670,250 @@ function showAnnotationOverlay() {
     });
   }
 
+  // ===== v3.0 ENHANCEMENT EVENT LISTENERS =====
+
+  // Opacity slider
+  const opacitySlider = document.getElementById('opacity-slider');
+  const opacityDisplay = document.getElementById('opacity-display');
+  if (opacitySlider && opacityDisplay) {
+    opacitySlider.addEventListener('input', (e) => {
+      selectedOpacity = parseInt(e.target.value) / 100;
+      opacityDisplay.textContent = `${e.target.value}%`;
+
+      // Update selected annotation opacity if any
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        annotations[selectedAnnotationIndex].opacity = selectedOpacity;
+        redrawAnnotations();
+      }
+    });
+  }
+
+  // Stroke width preset buttons
+  document.querySelectorAll('.stroke-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const width = parseInt(e.currentTarget.dataset.width);
+      selectedStrokeWidth = width;
+
+      // Update active state
+      document.querySelectorAll('.stroke-btn').forEach(b => b.classList.remove('active'));
+      e.currentTarget.classList.add('active');
+
+      // Update selected annotation stroke width if applicable
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        if (['line', 'rectangle', 'circle', 'freehand'].includes(annotation.type)) {
+          annotation.strokeWidth = width;
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  });
+
+  // Color palette preset buttons
+  document.querySelectorAll('.color-preset-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const color = e.currentTarget.dataset.color;
+      selectedColor = color;
+      if (colorPicker) colorPicker.value = color;
+
+      // Add to recent colors if not already there
+      if (!recentColors.includes(color)) {
+        recentColors.unshift(color);
+        if (recentColors.length > 5) recentColors.pop();
+      }
+
+      // Update selected annotation color if any
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        const colorableTypes = ['text', 'line', 'rectangle', 'circle', 'filled-rectangle', 'filled-circle', 'arrow', 'freehand', 'highlight', 'callout'];
+        if (colorableTypes.includes(annotation.type)) {
+          annotation.color = selectedColor;
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  });
+
+  // Text formatting buttons (Bold, Italic, Underline)
+  const textBoldBtn = document.getElementById('text-bold-btn');
+  const textItalicBtn = document.getElementById('text-italic-btn');
+  const textUnderlineBtn = document.getElementById('text-underline-btn');
+
+  if (textBoldBtn) {
+    textBoldBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedTextBold = !selectedTextBold;
+      textBoldBtn.style.background = selectedTextBold ? '#007AFF' : '#2d2d2d';
+
+      // Update selected text annotation
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        if (annotation.type === 'text') {
+          annotation.bold = selectedTextBold;
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  }
+
+  if (textItalicBtn) {
+    textItalicBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedTextItalic = !selectedTextItalic;
+      textItalicBtn.style.background = selectedTextItalic ? '#007AFF' : '#2d2d2d';
+
+      // Update selected text annotation
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        if (annotation.type === 'text') {
+          annotation.italic = selectedTextItalic;
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  }
+
+  if (textUnderlineBtn) {
+    textUnderlineBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedTextUnderline = !selectedTextUnderline;
+      textUnderlineBtn.style.background = selectedTextUnderline ? '#007AFF' : '#2d2d2d';
+
+      // Update selected text annotation
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        if (annotation.type === 'text') {
+          annotation.underline = selectedTextUnderline;
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  }
+
+  // Line arrow endpoint checkboxes
+  const lineArrowStartCheckbox = document.getElementById('line-arrow-start');
+  const lineArrowEndCheckbox = document.getElementById('line-arrow-end');
+
+  if (lineArrowStartCheckbox) {
+    lineArrowStartCheckbox.addEventListener('change', (e) => {
+      lineArrowStart = e.target.checked;
+
+      // Update selected line annotation
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        if (annotation.type === 'line') {
+          annotation.arrowStart = lineArrowStart;
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  }
+
+  if (lineArrowEndCheckbox) {
+    lineArrowEndCheckbox.addEventListener('change', (e) => {
+      lineArrowEnd = e.target.checked;
+
+      // Update selected line annotation
+      if (selectedAnnotationIndex >= 0 && annotations[selectedAnnotationIndex]) {
+        const annotation = annotations[selectedAnnotationIndex];
+        if (annotation.type === 'line') {
+          annotation.arrowEnd = lineArrowEnd;
+          redrawAnnotations();
+          saveState();
+        }
+      }
+    });
+  }
+
+  // Numbered Callout tool
+  const calloutBtn = document.querySelector('[data-tool="callout"]');
+  if (calloutBtn) {
+    calloutBtn.addEventListener('click', () => {
+      selectTool('callout');
+    });
+  }
+
+  // Save dropdown toggle
+  const saveDropdownToggle = document.getElementById('save-dropdown-toggle');
+  const saveDropdownMenu = document.getElementById('save-dropdown-menu');
+
+  if (saveDropdownToggle && saveDropdownMenu) {
+    saveDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      saveDropdownMenu.classList.toggle('show');
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== saveDropdownMenu) menu.classList.remove('show');
+      });
+    });
+  }
+
+  // Save format buttons
+  const savePngBtn = document.getElementById('save-png-btn');
+  const saveJpgBtn = document.getElementById('save-jpg-btn');
+  const savePdfBtn = document.getElementById('save-pdf-btn');
+
+  if (savePngBtn) {
+    savePngBtn.addEventListener('click', () => {
+      exportImage('png');
+      if (saveDropdownMenu) saveDropdownMenu.classList.remove('show');
+    });
+  }
+
+  if (saveJpgBtn) {
+    saveJpgBtn.addEventListener('click', () => {
+      exportImage('jpg');
+      if (saveDropdownMenu) saveDropdownMenu.classList.remove('show');
+    });
+  }
+
+  if (savePdfBtn) {
+    savePdfBtn.addEventListener('click', () => {
+      exportImage('pdf');
+      if (saveDropdownMenu) saveDropdownMenu.classList.remove('show');
+    });
+  }
+
+  // Templates dropdown toggle
+  const templatesDropdownToggle = document.getElementById('templates-dropdown-toggle');
+  const templatesDropdownMenu = document.getElementById('templates-dropdown-menu');
+
+  if (templatesDropdownToggle && templatesDropdownMenu) {
+    templatesDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      templatesDropdownMenu.classList.toggle('show');
+      updateTemplateList();
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== templatesDropdownMenu) menu.classList.remove('show');
+      });
+    });
+  }
+
+  // Save template button
+  const saveTemplateBtn = document.getElementById('save-template-btn');
+  if (saveTemplateBtn) {
+    saveTemplateBtn.addEventListener('click', () => {
+      saveTemplate();
+      if (templatesDropdownMenu) templatesDropdownMenu.classList.remove('show');
+    });
+  }
+
+  // Load template button (placeholder - actual templates loaded from list)
+  const loadTemplateBtn = document.getElementById('load-template-btn');
+  if (loadTemplateBtn) {
+    loadTemplateBtn.addEventListener('click', () => {
+      // This will be handled by individual template buttons
+      if (templatesDropdownMenu) templatesDropdownMenu.classList.remove('show');
+    });
+  }
+
+  // ===== END v3.0 ENHANCEMENT EVENT LISTENERS =====
+
   // Crop button
   const cropBtn = document.getElementById('cropBtn');
   if (cropBtn) {
@@ -1802,10 +2135,9 @@ function showAnnotationOverlay() {
   // Action buttons with null checks
   const copyBtn = document.getElementById('copyBtn');
   const clearBtn = document.getElementById('clearBtn');
-  const saveAsBtn = document.getElementById('saveAsBtn');
   const closeBtn = document.getElementById('closeBtn');
 
-  console.log('Button elements found:', { copyBtn: !!copyBtn, clearBtn: !!clearBtn, saveAsBtn: !!saveAsBtn, closeBtn: !!closeBtn });
+  console.log('Button elements found:', { copyBtn: !!copyBtn, clearBtn: !!clearBtn, closeBtn: !!closeBtn });
 
   if (copyBtn) {
     copyBtn.addEventListener('click', () => {
@@ -1825,14 +2157,8 @@ function showAnnotationOverlay() {
     console.error('Clear button not found!');
   }
 
-  if (saveAsBtn) {
-    saveAsBtn.addEventListener('click', () => {
-      console.log('Save button clicked');
-      showSaveAsDialog();
-    });
-  } else {
-    console.error('Save button not found!');
-  }
+  // Note: Save button is now a dropdown (save-dropdown-toggle) with separate format buttons
+  // The handlers are already set up in the v3.0 enhancement event listeners section
 
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
@@ -1900,6 +2226,17 @@ function updateShortcutInputs() {
       input.value = formatShortcutDisplay(userShortcuts[key]);
     }
   });
+
+  // Load the capture screenshot shortcut via background script
+  if (typeof chrome !== 'undefined' && chrome.runtime) {
+    chrome.runtime.sendMessage({ action: 'getCaptureShortcut' }, (response) => {
+      const captureInput = document.getElementById('shortcut-capture');
+      if (captureInput && response && response.success) {
+        captureInput.value = response.shortcut || 'Not set';
+        captureInput.dataset.originalShortcut = response.shortcut || '';
+      }
+    });
+  }
 }
 
 // Format shortcut for display (e.g., "ctrl+z" -> "Ctrl+Z")
@@ -2021,6 +2358,22 @@ function setupSettingsModal() {
   resetBtn.addEventListener('click', () => {
     if (confirm('Reset all keyboard shortcuts to defaults?')) {
       userShortcuts = { ...DEFAULT_SHORTCUTS };
+
+      // Reset capture screenshot shortcut via background script
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        const defaultCaptureShortcut = isMac ? 'Command+Shift+S' : 'Ctrl+Shift+S';
+        chrome.runtime.sendMessage({
+          action: 'updateCaptureShortcut',
+          shortcut: defaultCaptureShortcut
+        }, (response) => {
+          if (response && response.success) {
+            console.log('Capture screenshot shortcut reset to:', defaultCaptureShortcut);
+          } else {
+            console.error('Error resetting capture shortcut:', response ? response.error : 'Unknown error');
+          }
+        });
+      }
+
       updateShortcutInputs();
       saveKeyboardShortcuts();
     }
@@ -2073,7 +2426,51 @@ function handleShortcutRecording(e) {
     const shortcut = parts.join('+');
     const shortcutKey = recordingInput.id.replace('shortcut-', '');
 
-    // Check for conflicts
+    // Handle capture screenshot shortcut specially (uses Chrome commands API via background script)
+    if (shortcutKey === 'capture') {
+      // Format for Chrome commands API (e.g., "Ctrl+Shift+S")
+      const chromeShortcut = parts.map(part => {
+        if (part === 'ctrl') return 'Ctrl';
+        if (part === 'shift') return 'Shift';
+        if (part === 'alt') return 'Alt';
+        if (part === 'meta') return isMac ? 'Command' : 'Ctrl';
+        return part.toUpperCase();
+      }).join('+');
+
+      // Store reference to input since recordingInput will be cleared
+      const inputElement = recordingInput;
+
+      // Update using Chrome commands API via background script
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        chrome.runtime.sendMessage({
+          action: 'updateCaptureShortcut',
+          shortcut: chromeShortcut
+        }, (response) => {
+          if (response && response.success) {
+            inputElement.value = chromeShortcut;
+            inputElement.dataset.originalShortcut = chromeShortcut;
+            console.log('Capture screenshot shortcut updated:', chromeShortcut);
+          } else {
+            const errorMsg = response && response.error ? response.error : 'Unknown error';
+            alert(`Error setting shortcut: ${errorMsg}\n\nNote: Some shortcuts may be reserved by Chrome or your system.`);
+            inputElement.value = inputElement.dataset.originalShortcut || 'Not set';
+          }
+
+          // Cleanup after callback completes
+          inputElement.classList.remove('recording');
+        });
+      } else {
+        alert('Unable to update shortcut. Chrome runtime not available.');
+        inputElement.classList.remove('recording');
+      }
+
+      // Clear recording state immediately (but keep input reference above)
+      isRecording = false;
+      recordingInput = null;
+      return;
+    }
+
+    // Check for conflicts (for regular shortcuts)
     const conflict = Object.keys(userShortcuts).find(key =>
       key !== shortcutKey && userShortcuts[key] === shortcut
     );
@@ -2090,6 +2487,27 @@ function handleShortcutRecording(e) {
     isRecording = false;
     recordingInput = null;
   }
+}
+
+// v3.0: Helper function to draw arrowhead at line endpoint
+function drawArrowhead(ctx, fromX, fromY, toX, toY, size, color) {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(
+    toX - size * Math.cos(angle - Math.PI / 6),
+    toY - size * Math.sin(angle - Math.PI / 6)
+  );
+  ctx.lineTo(
+    toX - size * Math.cos(angle + Math.PI / 6),
+    toY - size * Math.sin(angle + Math.PI / 6)
+  );
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 function getAnnotationBounds(annotation) {
@@ -2144,7 +2562,19 @@ function getAnnotationBounds(annotation) {
       rotation: annotation.rotation || 0
     };
   }
-  
+
+  if (annotation.type === 'callout') {
+    // Callout is a numbered circle
+    const size = annotation.width || 40;
+    return {
+      x: annotation.x,
+      y: annotation.y,
+      width: size,
+      height: size,
+      rotation: annotation.rotation || 0
+    };
+  }
+
   if (annotation.type === 'line') {
     // Calculate bounds from line endpoints
     const minX = Math.min(annotation.x, annotation.x2 || annotation.x);
@@ -2418,6 +2848,7 @@ function handleMouseDown(e) {
       height: 0,
       arrowImage: selectedArrowType,
       color: selectedColor,
+      opacity: selectedOpacity,
       rotation: 0
     };
 
@@ -2470,6 +2901,10 @@ function handleMouseDown(e) {
       fontSize: currentFontSize,
       fontFamily: currentFontFamily,
       color: selectedColor,
+      opacity: selectedOpacity,
+      bold: selectedTextBold,
+      italic: selectedTextItalic,
+      underline: selectedTextUnderline,
       rotation: 0
     };
     
@@ -2482,7 +2917,29 @@ function handleMouseDown(e) {
     redrawAnnotations();
     return;
   }
-  
+
+  // Callout tool (v3.0) - create numbered callout
+  if (currentTool === 'callout') {
+    const calloutAnnotation = {
+      type: 'callout',
+      x: x - 20,
+      y: y - 20,
+      width: 40,
+      height: 40,
+      number: calloutCounter,
+      color: selectedColor,
+      opacity: selectedOpacity,
+      rotation: 0
+    };
+
+    annotations.push(calloutAnnotation);
+    selectedAnnotationIndex = annotations.length - 1;
+    calloutCounter++;
+    saveState();
+    redrawAnnotations();
+    return;
+  }
+
   // Line tool - start drawing
   if (currentTool === 'line') {
     // Make sure we're not in area selection mode
@@ -2501,7 +2958,10 @@ function handleMouseDown(e) {
       x2: x,
       y2: y,
       color: selectedColor,
-      strokeWidth: 3,
+      strokeWidth: selectedStrokeWidth,
+      opacity: selectedOpacity,
+      arrowStart: lineArrowStart,
+      arrowEnd: lineArrowEnd,
       rotation: 0
     };
 
@@ -2530,7 +2990,8 @@ function handleMouseDown(e) {
       width: 0,
       height: 0,
       color: selectedColor,
-      strokeWidth: 3,
+      strokeWidth: selectedStrokeWidth,
+      opacity: selectedOpacity,
       rotation: 0
     };
 
@@ -2559,6 +3020,7 @@ function handleMouseDown(e) {
       height: 0,
       blurRadius: blurIntensity, // Use blur intensity from slider
       blurEffect: blurEffectType, // 'blur' or 'pixelate'
+      opacity: selectedOpacity,
       rotation: 0
     };
 
@@ -2582,6 +3044,7 @@ function handleMouseDown(e) {
       points: currentFreehandPoints,
       color: selectedColor,
       strokeWidth: selectedStrokeWidth,
+      opacity: selectedOpacity,
       rotation: 0
     };
 
@@ -2605,6 +3068,7 @@ function handleMouseDown(e) {
       points: currentHighlightPoints,
       color: selectedColor,
       strokeWidth: highlightBrushSize, // Use highlight brush size from slider
+      opacity: selectedOpacity,
       rotation: 0
     };
 
@@ -3031,6 +3495,7 @@ function handleCanvasClick(e) {
       x: x - 20,
       y: y - 20,
       fontSize: 40,
+      opacity: selectedOpacity,
       rotation: 0
     });
 
@@ -3249,13 +3714,22 @@ function deleteSelected() {
 function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
   const { skipTextIfEditing = false, annotationIndex = -1 } = options;
 
-  // Draw text
+  // Draw text (v3.0: with bold, italic, underline support)
   if (annotation.type === 'text') {
     // Skip drawing if text is being edited (for live preview only)
     if (skipTextIfEditing && isTextEditing && selectedAnnotationIndex === annotationIndex) {
       return true; // Indicate we handled this type
     }
-    ctx.font = `${annotation.fontSize || 20}px ${annotation.fontFamily || 'Arial'}`;
+
+    // Apply opacity
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
+
+    // Build font string with bold/italic
+    let fontStyle = '';
+    if (annotation.italic) fontStyle += 'italic ';
+    if (annotation.bold) fontStyle += 'bold ';
+    ctx.font = `${fontStyle}${annotation.fontSize || 20}px ${annotation.fontFamily || 'Arial'}`;
     ctx.fillStyle = annotation.color || '#000000';
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
@@ -3264,80 +3738,164 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
     const lines = (annotation.text || 'Text').split('\n');
     const lineHeight = (annotation.fontSize || 20) * 1.2;
     lines.forEach((line, index) => {
-      ctx.fillText(line, bounds.x, bounds.y + (index * lineHeight));
+      const y = bounds.y + (index * lineHeight);
+      ctx.fillText(line, bounds.x, y);
+
+      // Draw underline if enabled
+      if (annotation.underline) {
+        const textWidth = ctx.measureText(line).width;
+        ctx.beginPath();
+        ctx.strokeStyle = annotation.color || '#000000';
+        ctx.lineWidth = Math.max(1, (annotation.fontSize || 20) / 20);
+        ctx.moveTo(bounds.x, y + (annotation.fontSize || 20) + 2);
+        ctx.lineTo(bounds.x + textWidth, y + (annotation.fontSize || 20) + 2);
+        ctx.stroke();
+      }
     });
+
+    ctx.globalAlpha = 1.0; // Reset opacity
     return true;
   }
 
-  // Draw emoji
+  // Draw emoji (v3.0: with opacity)
   if (annotation.type === 'emoji') {
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
     ctx.font = `${annotation.fontSize || 40}px Arial`;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
     ctx.fillText(annotation.emoji || '😀', bounds.x, bounds.y);
+    ctx.globalAlpha = 1.0;
     return true;
   }
 
-  // Draw line
+  // Draw line (v3.0: with optional arrow endpoints)
   if (annotation.type === 'line') {
+    const x1 = annotation.x;
+    const y1 = annotation.y;
+    const x2 = annotation.x2 || annotation.x;
+    const y2 = annotation.y2 || annotation.y;
+
+    // Apply opacity
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
+
     ctx.beginPath();
     ctx.strokeStyle = annotation.color || '#FF0000';
     ctx.lineWidth = annotation.strokeWidth || 3;
     ctx.lineCap = 'round';
-    ctx.moveTo(annotation.x, annotation.y);
-    ctx.lineTo(annotation.x2 || annotation.x, annotation.y2 || annotation.y);
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
     ctx.stroke();
+
+    // Draw arrow endpoints if enabled
+    const arrowSize = (annotation.strokeWidth || 3) * 3;
+
+    if (annotation.arrowStart) {
+      drawArrowhead(ctx, x2, y2, x1, y1, arrowSize, annotation.color || '#FF0000');
+    }
+
+    if (annotation.arrowEnd !== false) { // Default to true for backward compatibility
+      drawArrowhead(ctx, x1, y1, x2, y2, arrowSize, annotation.color || '#FF0000');
+    }
+
+    ctx.globalAlpha = 1.0; // Reset opacity
     return true;
   }
 
-  // Draw rectangle
+  // Draw rectangle (v3.0: with opacity)
   if (annotation.type === 'rectangle') {
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
     ctx.strokeStyle = annotation.color || '#FF0000';
     ctx.lineWidth = annotation.strokeWidth || 3;
     ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    ctx.globalAlpha = 1.0;
     return true;
   }
 
-  // Draw filled rectangle
+  // Draw filled rectangle (v3.0: with opacity)
   if (annotation.type === 'filled-rectangle') {
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
     ctx.fillStyle = annotation.color || '#FF0000';
     ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    ctx.globalAlpha = 1.0;
     return true;
   }
 
-  // Draw circle
+  // Draw circle (v3.0: with opacity)
   if (annotation.type === 'circle') {
     const radiusX = bounds.width / 2;
     const radiusY = bounds.height / 2;
     const cx = bounds.x + radiusX;
     const cy = bounds.y + radiusY;
 
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
     ctx.beginPath();
     ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
     ctx.strokeStyle = annotation.color || '#FF0000';
     ctx.lineWidth = annotation.strokeWidth || 3;
     ctx.stroke();
+    ctx.globalAlpha = 1.0;
     return true;
   }
 
-  // Draw filled circle
+  // Draw filled circle (v3.0: with opacity)
   if (annotation.type === 'filled-circle') {
     const radiusX = bounds.width / 2;
     const radiusY = bounds.height / 2;
     const cx = bounds.x + radiusX;
     const cy = bounds.y + radiusY;
 
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
     ctx.beginPath();
     ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
     ctx.fillStyle = annotation.color || '#FF0000';
     ctx.fill();
+    ctx.globalAlpha = 1.0;
     return true;
   }
 
-  // Draw arrow (with color tinting)
+  // Draw numbered callout (v3.0: new feature)
+  if (annotation.type === 'callout') {
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
+
+    const size = annotation.width || 40;
+    const radius = size / 2;
+    const cx = bounds.x + radius;
+    const cy = bounds.y + radius;
+
+    // Draw circle
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = annotation.color || '#FF0000';
+    ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw number
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${size * 0.6}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(annotation.number || '1', cx, cy);
+
+    ctx.globalAlpha = 1.0;
+    return true;
+  }
+
+  // Draw arrow (v3.0: with color tinting and opacity)
   if (annotation.type === 'arrow' && annotation.arrowImage) {
     const arrowImg = arrowImageCache[annotation.arrowImage];
     if (arrowImg && arrowImg.complete && arrowImg.naturalWidth > 0) {
+      const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+      ctx.globalAlpha = opacity;
+
       // If arrow has a color property, colorize it; otherwise draw normally (backward compatibility)
       if (annotation.color) {
         // Create a temporary canvas to colorize the arrow
@@ -3360,13 +3918,18 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
         // No color specified, draw original red arrow
         ctx.drawImage(arrowImg, bounds.x, bounds.y, bounds.width, bounds.height);
       }
+
+      ctx.globalAlpha = 1.0;
       return true;
     }
     return false; // Arrow not ready
   }
 
-  // Draw freehand path
+  // Draw freehand path (v3.0: with opacity)
   if (annotation.type === 'freehand' && annotation.points && annotation.points.length > 1) {
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    ctx.globalAlpha = opacity;
+
     ctx.beginPath();
     ctx.strokeStyle = annotation.color || '#FF0000';
     ctx.lineWidth = annotation.strokeWidth || 3;
@@ -3390,13 +3953,17 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
     }
 
     ctx.stroke();
+    ctx.globalAlpha = 1.0;
     return true;
   }
 
-  // Draw highlight path (similar to freehand but with transparency)
+  // Draw highlight path (v3.0: with adjustable opacity)
   if (annotation.type === 'highlight' && annotation.points && annotation.points.length > 1) {
     ctx.save();
-    ctx.globalAlpha = 0.4; // Make it semi-transparent like a real highlighter
+    // Use custom opacity if set, otherwise default to 0.4 (40%)
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 0.4;
+    ctx.globalAlpha = opacity;
+
     ctx.beginPath();
     ctx.strokeStyle = annotation.color || '#FFFF00'; // Default to yellow
     ctx.lineWidth = annotation.strokeWidth || 9; // Thicker than pen
@@ -3572,6 +4139,15 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
   }
 
   if (annotation.type === 'emoji') {
+    renderAnnotationShape(ctx, annotation, bounds);
+    ctx.restore();
+    if (isSelected) {
+      drawSelectionHandles(ctx, bounds);
+    }
+    return;
+  }
+
+  if (annotation.type === 'callout') {
     renderAnnotationShape(ctx, annotation, bounds);
     ctx.restore();
     if (isSelected) {
@@ -4182,10 +4758,11 @@ function saveScreenshot(filename = null) {
         finalCtx.translate(-centerX, -centerY);
       }
 
-      // Use shared helper for text, rectangle, circle, arrow, freehand, and highlight
+      // Use shared helper for text, rectangle, circle, arrow, freehand, highlight, emoji, and callout
       if (annotation.type === 'text' || annotation.type === 'rectangle' ||
           annotation.type === 'circle' || annotation.type === 'arrow' ||
-          annotation.type === 'freehand' || annotation.type === 'highlight') {
+          annotation.type === 'freehand' || annotation.type === 'highlight' ||
+          annotation.type === 'emoji' || annotation.type === 'callout') {
         renderAnnotationShape(finalCtx, annotation, bounds);
         finalCtx.restore();
         return;
@@ -4306,10 +4883,11 @@ function copyToClipboard() {
         finalCtx.translate(-centerX, -centerY);
       }
 
-      // Use shared helper for text, rectangle, circle, arrow, freehand, and highlight
+      // Use shared helper for text, rectangle, circle, arrow, freehand, highlight, emoji, and callout
       if (annotation.type === 'text' || annotation.type === 'rectangle' ||
           annotation.type === 'circle' || annotation.type === 'arrow' ||
-          annotation.type === 'freehand' || annotation.type === 'highlight') {
+          annotation.type === 'freehand' || annotation.type === 'highlight' ||
+          annotation.type === 'emoji' || annotation.type === 'callout') {
         renderAnnotationShape(finalCtx, annotation, bounds);
         finalCtx.restore();
         return;
@@ -4462,6 +5040,300 @@ function fallbackDownload(blob, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ===== v3.0 ENHANCEMENT FUNCTIONS =====
+
+// Export image in different formats using Chrome downloads API (with proper rendering)
+function exportImage(format) {
+  const canvas = document.getElementById('annotation-canvas');
+  const img = document.getElementById('screenshot-img');
+
+  if (!canvas || !img) {
+    console.error('Canvas or image not found');
+    return;
+  }
+
+  // Create a new canvas for export (matches current canvas dimensions - respects cropping)
+  const finalCanvas = document.createElement('canvas');
+  finalCanvas.width = canvas.width;
+  finalCanvas.height = canvas.height;
+  const finalCtx = finalCanvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+  finalCtx.imageSmoothingEnabled = false;
+
+  // Draw the current screenshot (cropped version if user cropped)
+  finalCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  const timestamp = Date.now();
+  let filename, mimeType, quality;
+
+  if (format === 'png') {
+    filename = `screenshot-annotated-${timestamp}.png`;
+    mimeType = 'image/png';
+    quality = undefined;
+  } else if (format === 'jpg') {
+    filename = `screenshot-annotated-${timestamp}.jpg`;
+    mimeType = 'image/jpeg';
+    quality = 0.95;
+  } else if (format === 'pdf') {
+    filename = `screenshot-annotated-${timestamp}.pdf`;
+    mimeType = 'image/jpeg';
+    quality = 0.95;
+  }
+
+  // Draw all annotations with proper transformations
+  const drawAnnotations = () => {
+    annotations.forEach(annotation => {
+      const bounds = getAnnotationBounds(annotation);
+      if (!bounds) return;
+
+      finalCtx.save();
+
+      const centerX = bounds.x + bounds.width / 2;
+      const centerY = bounds.y + bounds.height / 2;
+
+      // Apply rotation
+      if (bounds.rotation && bounds.rotation !== 0) {
+        finalCtx.translate(centerX, centerY);
+        finalCtx.rotate(bounds.rotation * Math.PI / 180);
+        finalCtx.translate(-centerX, -centerY);
+      }
+
+      // Use shared helper for most annotation types
+      if (annotation.type === 'text' || annotation.type === 'rectangle' ||
+          annotation.type === 'circle' || annotation.type === 'arrow' ||
+          annotation.type === 'freehand' || annotation.type === 'highlight' ||
+          annotation.type === 'emoji' || annotation.type === 'callout' ||
+          annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle' ||
+          annotation.type === 'line') {
+        renderAnnotationShape(finalCtx, annotation, bounds);
+        finalCtx.restore();
+        return;
+      }
+
+      // Draw blur (1:1 scale since we're using canvas dimensions directly)
+      if (annotation.type === 'blur') {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = Math.max(1, Math.round(bounds.width));
+        tempCanvas.height = Math.max(1, Math.round(bounds.height));
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Copy the region to blur from the img
+        tempCtx.drawImage(img, bounds.x, bounds.y, bounds.width, bounds.height, 0, 0, tempCanvas.width, tempCanvas.height);
+
+        const blurRadius = annotation.blurRadius || 10;
+        finalCtx.filter = `blur(${blurRadius}px)`;
+
+        // Draw the blurred region back
+        finalCtx.drawImage(tempCanvas, bounds.x, bounds.y, bounds.width, bounds.height);
+
+        finalCtx.filter = 'none';
+      }
+
+      finalCtx.restore();
+    });
+
+    // Convert to blob and download
+    finalCanvas.toBlob((blob) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Data = reader.result.split(',')[1];
+
+        if (format === 'pdf') {
+          // Create a basic PDF with embedded image
+          const pdfContent = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${finalCanvas.width} ${finalCanvas.height}] /Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 44 >>
+stream
+q
+${finalCanvas.width} 0 0 ${finalCanvas.height} 0 0 cm
+/Im1 Do
+Q
+endstream
+endobj
+5 0 obj
+<< /Type /XObject /Subtype /Image /Width ${finalCanvas.width} /Height ${finalCanvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${base64Data.length} >>
+stream
+${atob(base64Data)}
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000281 00000 n
+0000000373 00000 n
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+${500 + base64Data.length}
+%%EOF`;
+
+          // Convert PDF content to base64
+          const pdfBase64 = btoa(pdfContent);
+
+          // Send to background script for download
+          chrome.runtime.sendMessage({
+            action: 'downloadImage',
+            data: pdfBase64,
+            filename: filename
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.error('Download error:', chrome.runtime.lastError);
+              alert('Failed to download PDF. Please try again.');
+            } else if (response && response.success) {
+              console.log('PDF saved successfully');
+            }
+          });
+        } else {
+          // Send PNG/JPG to background script for download
+          chrome.runtime.sendMessage({
+            action: 'downloadImage',
+            data: base64Data,
+            filename: filename
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.error('Download error:', chrome.runtime.lastError);
+              alert(`Failed to download ${format.toUpperCase()}. Please try again.`);
+            } else if (response && response.success) {
+              console.log(`${format.toUpperCase()} saved successfully`);
+            }
+          });
+        }
+      };
+      reader.readAsDataURL(blob);
+    }, mimeType, quality);
+  };
+
+  // Wait for all arrow images to load before drawing
+  const loadPromises = [];
+  annotations.forEach(annotation => {
+    if (annotation.type === 'arrow' && annotation.arrowImage) {
+      const arrowImg = arrowImageCache[annotation.arrowImage];
+      if (arrowImg && arrowImg.complete && arrowImg.naturalWidth > 0) {
+        // Already loaded
+      } else if (arrowImagePromises[annotation.arrowImage]) {
+        loadPromises.push(arrowImagePromises[annotation.arrowImage]);
+      } else {
+        // Load it now
+        const newImg = new Image();
+        const promise = new Promise((resolve, reject) => {
+          newImg.onload = () => {
+            arrowImageCache[annotation.arrowImage] = newImg;
+            resolve(newImg);
+          };
+          newImg.onerror = reject;
+        });
+        newImg.src = getArrowImageURL(annotation.arrowImage);
+        loadPromises.push(promise);
+      }
+    }
+  });
+
+  if (loadPromises.length === 0) {
+    drawAnnotations();
+  } else {
+    Promise.all(loadPromises).then(() => {
+      drawAnnotations();
+    }).catch((error) => {
+      console.error('Error loading arrow images:', error);
+      // Still try to draw what we can
+      drawAnnotations();
+    });
+  }
+}
+
+// Save current annotations as a template
+function saveTemplate() {
+  const templateName = prompt('Enter template name:', `Template ${savedTemplates.length + 1}`);
+
+  if (!templateName) return;
+
+  const template = {
+    name: templateName,
+    annotations: JSON.parse(JSON.stringify(annotations)), // Deep copy
+    timestamp: Date.now()
+  };
+
+  savedTemplates.push(template);
+
+  // Save to chrome storage
+  chrome.storage.local.set({ annotationTemplates: savedTemplates }, () => {
+    console.log('Template saved:', templateName);
+    alert(`Template "${templateName}" saved successfully!`);
+  });
+}
+
+// Load a template
+function loadTemplate(template) {
+  if (confirm(`Load template "${template.name}"? This will replace current annotations.`)) {
+    annotations = JSON.parse(JSON.stringify(template.annotations)); // Deep copy
+    selectedAnnotationIndex = -1;
+    redrawAnnotations();
+    saveState();
+    alert('Template loaded successfully!');
+  }
+}
+
+// Update template list UI
+function updateTemplateList() {
+  // Load templates from storage
+  chrome.storage.local.get(['annotationTemplates'], (result) => {
+    savedTemplates = result.annotationTemplates || [];
+
+    const templateList = document.getElementById('template-list');
+    if (!templateList) return;
+
+    if (savedTemplates.length === 0) {
+      templateList.innerHTML = '<div style="padding: 8px; text-align: center; color: #aaa; font-size: 11px;">No templates saved</div>';
+      return;
+    }
+
+    templateList.innerHTML = savedTemplates.map((template, index) => `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-bottom: 1px solid #333;">
+        <button class="template-load-btn" data-index="${index}" style="flex: 1; text-align: left; background: none; border: none; color: #fff; cursor: pointer; font-size: 11px; padding: 4px;">
+          ${template.name}
+        </button>
+        <button class="template-delete-btn" data-index="${index}" style="background: #ff4444; border: none; color: #fff; cursor: pointer; font-size: 10px; padding: 2px 6px; border-radius: 3px;">×</button>
+      </div>
+    `).join('');
+
+    // Attach event listeners to template buttons
+    templateList.querySelectorAll('.template-load-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt(e.currentTarget.dataset.index);
+        loadTemplate(savedTemplates[index]);
+        const templatesDropdownMenu = document.getElementById('templates-dropdown-menu');
+        if (templatesDropdownMenu) templatesDropdownMenu.classList.remove('show');
+      });
+    });
+
+    templateList.querySelectorAll('.template-delete-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const index = parseInt(e.currentTarget.dataset.index);
+        if (confirm(`Delete template "${savedTemplates[index].name}"?`)) {
+          savedTemplates.splice(index, 1);
+          chrome.storage.local.set({ annotationTemplates: savedTemplates }, () => {
+            updateTemplateList();
+          });
+        }
+      });
+    });
+  });
+}
+
+// ===== END v3.0 ENHANCEMENT FUNCTIONS =====
 
 function closeOverlay() {
   exitTextEditing(); // Exit text editing if active
