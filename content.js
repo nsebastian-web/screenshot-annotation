@@ -1193,6 +1193,9 @@ function showAnnotationOverlay() {
         <div class="settings-section">
           <h3>🔗 Google Drive Integration</h3>
           <div class="gdrive-setup-info">
+            <div class="important-notice">
+              <strong>⚠️ Important:</strong> Each user must create their own Google OAuth Client ID. The extension cannot share OAuth credentials between users for security reasons.
+            </div>
             <p class="info-text">To enable screenshot sharing to Google Drive, you need to set up OAuth credentials:</p>
 
             <div class="setup-steps">

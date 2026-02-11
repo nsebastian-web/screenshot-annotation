@@ -642,6 +642,23 @@
   margin-bottom: 16px;
 }
 
+.important-notice {
+  background: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid #ffc107;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #ffd54f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.important-notice strong {
+  color: #ffc107;
+  display: block;
+  margin-bottom: 4px;
+}
+
 .info-text {
   color: #ccc;
   font-size: 14px;

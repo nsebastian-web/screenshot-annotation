@@ -16,12 +16,6 @@
     "<all_urls>",
     "https://www.googleapis.com/*"
   ],
-  "oauth2": {
-    "client_id": "240277286306-ned4im02rlkrt35v8gue4htdak5761sv.apps.googleusercontent.com",
-    "scopes": [
-      "https://www.googleapis.com/auth/drive.file"
-    ]
-  },
   "background": {
     "service_worker": "background.js"
   },

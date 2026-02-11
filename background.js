@@ -11,20 +11,60 @@ class GoogleDriveUploader {
   // Get OAuth token (interactive or silent)
   async authenticate(interactive = false) {
     try {
-      const token = await new Promise((resolve, reject) => {
-        chrome.identity.getAuthToken({ interactive }, (token) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else if (!token) {
-            reject(new Error('No token received'));
-          } else {
-            resolve(token);
-          }
+      // Get client ID from storage
+      const clientId = await new Promise((resolve) => {
+        chrome.storage.sync.get(['googleDriveClientId'], (result) => {
+          resolve(result.googleDriveClientId);
         });
       });
 
-      this.accessToken = token;
-      return token;
+      if (!clientId) {
+        throw new Error('No client ID configured. Please set up Google Drive in extension settings.');
+      }
+
+      // If we have a cached token and not forcing interactive, try to reuse it
+      if (this.accessToken && !interactive) {
+        return this.accessToken;
+      }
+
+      // Construct OAuth URL
+      const redirectUri = `https://${chrome.runtime.id}.chromiumapp.org/`;
+      const scope = 'https://www.googleapis.com/auth/drive.file';
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${encodeURIComponent(clientId)}` +
+        `&response_type=token` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&scope=${encodeURIComponent(scope)}`;
+
+      // Launch OAuth flow
+      const responseUrl = await new Promise((resolve, reject) => {
+        chrome.identity.launchWebAuthFlow(
+          {
+            url: authUrl,
+            interactive: interactive
+          },
+          (responseUrl) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+            } else if (!responseUrl) {
+              reject(new Error('No response from OAuth'));
+            } else {
+              resolve(responseUrl);
+            }
+          }
+        );
+      });
+
+      // Extract access token from response URL
+      const params = new URL(responseUrl).hash.substring(1);
+      const tokenMatch = params.match(/access_token=([^&]+)/);
+
+      if (!tokenMatch) {
+        throw new Error('No access token in response');
+      }
+
+      this.accessToken = tokenMatch[1];
+      return this.accessToken;
     } catch (error) {
       console.error('Authentication error:', error);
       throw error;
@@ -204,23 +244,17 @@ class GoogleDriveUploader {
     }
 
     try {
-      await new Promise((resolve, reject) => {
-        chrome.identity.removeCachedAuthToken(
-          { token: this.accessToken },
-          () => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-            } else {
-              resolve();
-            }
-          }
-        );
+      // Revoke token via Google API
+      await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${this.accessToken}`, {
+        method: 'POST'
       });
 
       this.accessToken = null;
       console.log('Signed out successfully');
     } catch (error) {
       console.error('Sign out error:', error);
+      // Clear token anyway
+      this.accessToken = null;
       throw error;
     }
   }
