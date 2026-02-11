@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Screenshot & Annotation Tool",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "description": "Professional screenshot tool with advanced annotations, opacity control, text formatting, numbered callouts, and multi-format export (PNG/JPG/PDF)",
   "permissions": [
     "activeTab",

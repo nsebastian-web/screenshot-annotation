@@ -180,6 +180,10 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 
 MIT License - feel free to use and modify for your needs.
 
+## Credits
+
+Extension icon and third-party resources are credited in [CREDITS.md](CREDITS.md).
+
 ## Support
 
 For issues, questions, or feature requests, please open an issue on GitHub.
