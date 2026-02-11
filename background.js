@@ -38,11 +38,19 @@ class GoogleDriveUploader {
 
       // Launch OAuth flow
       const responseUrl = await new Promise((resolve, reject) => {
+        const flowOptions = {
+          url: authUrl,
+          interactive: interactive
+        };
+
+        // Add timeout settings for non-interactive mode to handle redirects
+        if (!interactive) {
+          flowOptions.abortOnLoadForNonInteractive = true;
+          flowOptions.timeoutMsForNonInteractive = 3000;
+        }
+
         chrome.identity.launchWebAuthFlow(
-          {
-            url: authUrl,
-            interactive: interactive
-          },
+          flowOptions,
           (responseUrl) => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
@@ -199,12 +207,18 @@ class GoogleDriveUploader {
   // Complete upload flow
   async shareScreenshot(blobData, filename) {
     try {
-      // Try silent auth first
-      try {
-        await this.authenticate(false);
-      } catch (error) {
-        // If silent fails, try interactive
+      // Try to reuse existing token if available, otherwise use interactive auth
+      if (!this.accessToken) {
+        // First time - go straight to interactive auth
         await this.authenticate(true);
+      } else {
+        // Have token - try to reuse it, fall back to interactive if it fails
+        try {
+          await this.authenticate(false);
+        } catch (error) {
+          // Token expired or invalid - get new one interactively
+          await this.authenticate(true);
+        }
       }
 
       // Convert base64 to blob
