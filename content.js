@@ -37,7 +37,6 @@ let selectedOpacity = 1.0; // Default opacity (1.0 = 100%)
 let colorPresets = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#000000', '#FFFFFF']; // Default color palette
 let recentColors = []; // Recently used colors
 let calloutCounter = 1; // Counter for numbered callouts
-let savedTemplates = []; // Saved annotation templates
 let lineArrowStart = false; // Whether line has arrow at start
 let lineArrowEnd = true; // Whether line has arrow at end (default true for arrow lines)
 let selectedTextBold = false; // Text formatting: bold
@@ -164,7 +163,8 @@ const ICONS = {
   clear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
   save: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
-  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`
+  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  share: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`
 };
 
 // Helper function to get icon HTML
@@ -1131,6 +1131,9 @@ function showAnnotationOverlay() {
           <button class="action-btn icon-btn" id="copyBtn" title="Copy (Ctrl+C)">
             ${getIcon('copy', 16)}
           </button>
+          <button class="action-btn icon-btn" id="shareBtn" title="Share to Google Drive">
+            ${getIcon('share', 16)}
+          </button>
           <button class="action-btn" id="clearBtn" title="Clear All">
             ${getIcon('clear', 14)} Clear
           </button>
@@ -1147,18 +1150,6 @@ function showAnnotationOverlay() {
           <button class="action-btn" id="closeBtn" title="Close">
             ${getIcon('close', 14)}
           </button>
-        </div>
-
-        <!-- Templates Button -->
-        <div class="dropdown-container">
-          <button class="action-btn icon-btn dropdown-toggle" id="templates-dropdown-toggle" title="Templates">
-            📋
-          </button>
-          <div class="dropdown-menu" id="templates-dropdown-menu" style="min-width: 180px;">
-            <button class="dropdown-item" id="save-template-btn" title="Save as Template">💾 Save Template</button>
-            <button class="dropdown-item" id="load-template-btn" title="Load Template">📂 Load Template</button>
-            <div id="template-list" style="max-height: 150px; overflow-y: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a;"></div>
-          </div>
         </div>
 
         <!-- Settings Button -->
@@ -1195,12 +1186,55 @@ function showAnnotationOverlay() {
   settingsModal.innerHTML = `
     <div class="settings-modal-content">
       <div class="settings-header">
-        <h2>⌨️ Keyboard Shortcuts</h2>
+        <h2>⚙️ Extension Settings</h2>
         <button class="settings-close" id="settings-close-btn">✕</button>
       </div>
       <div class="settings-body">
         <div class="settings-section">
-          <h3>Tools</h3>
+          <h3>🔗 Google Drive Integration</h3>
+          <div class="gdrive-setup-info">
+            <p class="info-text">To enable screenshot sharing to Google Drive, you need to set up OAuth credentials:</p>
+
+            <div class="setup-steps">
+              <details>
+                <summary><strong>📋 Step-by-Step Setup Instructions</strong></summary>
+                <ol class="setup-list">
+                  <li><strong>Go to Google Cloud Console:</strong> <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a></li>
+                  <li><strong>Create a project:</strong> Click "Select a project" → "New Project" → Name it "Screenshot Extension"</li>
+                  <li><strong>Enable Google Drive API:</strong> Go to "APIs & Services" → "Enable APIs" → Search for "Google Drive API" → Click "Enable"</li>
+                  <li><strong>Create OAuth Credentials:</strong>
+                    <ul>
+                      <li>Go to "Credentials" → "Create Credentials" → "OAuth client ID"</li>
+                      <li>Application type: "Web application"</li>
+                      <li>Name: "Screenshot Extension"</li>
+                      <li>Authorized redirect URIs: Add <code>https://<span id="extension-id-display">loading...</span>.chromiumapp.org/</code></li>
+                      <li>Click "Create" and copy the <strong>Client ID</strong></li>
+                    </ul>
+                  </li>
+                  <li><strong>Paste the Client ID below</strong> and click "Save"</li>
+                </ol>
+              </details>
+            </div>
+
+            <div class="client-id-section">
+              <label for="gdrive-client-id">Google OAuth Client ID:</label>
+              <input
+                type="text"
+                id="gdrive-client-id"
+                class="gdrive-input"
+                placeholder="240277286306-xxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+              />
+              <button id="save-gdrive-client-id" class="settings-btn primary">Save Client ID</button>
+              <button id="test-gdrive-connection" class="settings-btn">Test Connection</button>
+              <p class="connection-status" id="gdrive-connection-status"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>⌨️ Keyboard Shortcuts</h3>
+          <div class="settings-subsection">
+          <h4>Tools</h4>
           <div class="shortcut-row">
             <label>Select Tool</label>
             <input type="text" id="shortcut-selectTool" class="shortcut-input" placeholder="v" readonly />
@@ -1282,6 +1316,42 @@ function showAnnotationOverlay() {
     </div>
   `;
   document.body.appendChild(settingsModal);
+
+  // Create Share Modal
+  const shareModal = document.createElement('div');
+  shareModal.id = 'share-modal';
+  shareModal.innerHTML = `
+    <div class="settings-modal-content">
+      <div class="settings-header">
+        <h2>📤 Share to Google Drive</h2>
+        <button class="settings-close" id="share-modal-close">✕</button>
+      </div>
+      <div class="settings-body">
+        <div id="share-status" class="share-status">
+          <p>Uploading to Google Drive...</p>
+          <div class="loading-spinner"></div>
+        </div>
+        <div id="share-success" class="share-success" style="display: none;">
+          <p class="success-message">✓ Screenshot shared successfully!</p>
+          <div class="share-link-container">
+            <input type="text" id="share-link-input" readonly />
+            <button id="copy-link-btn" class="settings-btn primary">Copy Link</button>
+          </div>
+          <p class="share-info">Anyone with this link can view your screenshot</p>
+        </div>
+        <div id="share-error" class="share-error" style="display: none;">
+          <p class="error-message">✗ Failed to share</p>
+          <p id="share-error-message" class="error-detail"></p>
+          <button id="share-retry-btn" class="settings-btn">Retry</button>
+        </div>
+      </div>
+      <div class="settings-footer">
+        <button id="share-signout-btn" class="settings-btn">Sign Out</button>
+        <button id="share-done-btn" class="settings-btn primary">Done</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(shareModal);
 
   // Setup canvas
   const img = document.getElementById('screenshot-img');
@@ -1879,38 +1949,8 @@ function showAnnotationOverlay() {
     });
   }
 
-  // Templates dropdown toggle
-  const templatesDropdownToggle = document.getElementById('templates-dropdown-toggle');
-  const templatesDropdownMenu = document.getElementById('templates-dropdown-menu');
 
-  if (templatesDropdownToggle && templatesDropdownMenu) {
-    templatesDropdownToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      templatesDropdownMenu.classList.toggle('show');
-      updateTemplateList();
-      document.querySelectorAll('.dropdown-menu').forEach(menu => {
-        if (menu !== templatesDropdownMenu) menu.classList.remove('show');
-      });
-    });
-  }
 
-  // Save template button
-  const saveTemplateBtn = document.getElementById('save-template-btn');
-  if (saveTemplateBtn) {
-    saveTemplateBtn.addEventListener('click', () => {
-      saveTemplate();
-      if (templatesDropdownMenu) templatesDropdownMenu.classList.remove('show');
-    });
-  }
-
-  // Load template button (placeholder - actual templates loaded from list)
-  const loadTemplateBtn = document.getElementById('load-template-btn');
-  if (loadTemplateBtn) {
-    loadTemplateBtn.addEventListener('click', () => {
-      // This will be handled by individual template buttons
-      if (templatesDropdownMenu) templatesDropdownMenu.classList.remove('show');
-    });
-  }
 
   // ===== END v3.0 ENHANCEMENT EVENT LISTENERS =====
 
@@ -2169,6 +2209,62 @@ function showAnnotationOverlay() {
     console.error('Close button not found!');
   }
 
+  // Share button and modal handlers
+  const shareBtn = document.getElementById('shareBtn');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', async () => {
+      console.log('Share button clicked');
+      await handleShareToGoogleDrive();
+    });
+  }
+
+  // Share modal close handlers
+  const shareModalCloseBtn = document.getElementById('share-modal-close');
+  const shareDoneBtn = document.getElementById('share-done-btn');
+  if (shareModalCloseBtn) {
+    shareModalCloseBtn.addEventListener('click', () => {
+      closeShareModal();
+    });
+  }
+  if (shareDoneBtn) {
+    shareDoneBtn.addEventListener('click', () => {
+      closeShareModal();
+    });
+  }
+
+  // Copy link button
+  const copyLinkBtn = document.getElementById('copy-link-btn');
+  if (copyLinkBtn) {
+    copyLinkBtn.addEventListener('click', () => {
+      const linkInput = document.getElementById('share-link-input');
+      if (linkInput) {
+        linkInput.select();
+        document.execCommand('copy');
+        const originalText = copyLinkBtn.textContent;
+        copyLinkBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyLinkBtn.textContent = originalText;
+        }, 2000);
+      }
+    });
+  }
+
+  // Sign out button
+  const shareSignoutBtn = document.getElementById('share-signout-btn');
+  if (shareSignoutBtn) {
+    shareSignoutBtn.addEventListener('click', async () => {
+      await handleSignOut();
+    });
+  }
+
+  // Retry button
+  const shareRetryBtn = document.getElementById('share-retry-btn');
+  if (shareRetryBtn) {
+    shareRetryBtn.addEventListener('click', async () => {
+      await handleShareToGoogleDrive();
+    });
+  }
+
   // Initialize history with initial state
   saveState();
 
@@ -2192,6 +2288,7 @@ function showAnnotationOverlay() {
   // Settings modal functionality
   loadKeyboardShortcuts();
   setupSettingsModal();
+  setupGoogleDriveSettings();
 }
 
 // Load keyboard shortcuts from storage
@@ -2486,6 +2583,108 @@ function handleShortcutRecording(e) {
     recordingInput.classList.remove('recording');
     isRecording = false;
     recordingInput = null;
+  }
+}
+
+// Setup Google Drive settings
+function setupGoogleDriveSettings() {
+  // Display extension ID for setup instructions
+  const extensionIdDisplay = document.getElementById('extension-id-display');
+  if (extensionIdDisplay && typeof chrome !== 'undefined' && chrome.runtime) {
+    extensionIdDisplay.textContent = chrome.runtime.id;
+  }
+
+  // Load saved client ID
+  loadGoogleDriveClientId();
+
+  // Save client ID button
+  const saveClientIdBtn = document.getElementById('save-gdrive-client-id');
+  if (saveClientIdBtn) {
+    saveClientIdBtn.addEventListener('click', () => {
+      const clientIdInput = document.getElementById('gdrive-client-id');
+      const statusEl = document.getElementById('gdrive-connection-status');
+
+      if (clientIdInput && clientIdInput.value.trim()) {
+        const clientId = clientIdInput.value.trim();
+
+        // Save to storage
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          chrome.storage.sync.set({ googleDriveClientId: clientId }, () => {
+            if (statusEl) {
+              statusEl.textContent = '✓ Client ID saved successfully!';
+              statusEl.className = 'connection-status success';
+              setTimeout(() => {
+                statusEl.textContent = '';
+              }, 3000);
+            }
+          });
+        }
+      } else {
+        if (statusEl) {
+          statusEl.textContent = '✗ Please enter a valid Client ID';
+          statusEl.className = 'connection-status error';
+        }
+      }
+    });
+  }
+
+  // Test connection button
+  const testConnectionBtn = document.getElementById('test-gdrive-connection');
+  if (testConnectionBtn) {
+    testConnectionBtn.addEventListener('click', async () => {
+      const statusEl = document.getElementById('gdrive-connection-status');
+      const clientIdInput = document.getElementById('gdrive-client-id');
+
+      if (!clientIdInput || !clientIdInput.value.trim()) {
+        if (statusEl) {
+          statusEl.textContent = '✗ Please save a Client ID first';
+          statusEl.className = 'connection-status error';
+        }
+        return;
+      }
+
+      if (statusEl) {
+        statusEl.textContent = '⏳ Testing connection...';
+        statusEl.className = 'connection-status';
+      }
+
+      try {
+        // Test by attempting to get auth token
+        const result = await new Promise((resolve) => {
+          chrome.runtime.sendMessage(
+            { action: 'testGoogleDriveAuth' },
+            (response) => resolve(response)
+          );
+        });
+
+        if (statusEl) {
+          if (result && result.success) {
+            statusEl.textContent = '✓ Connection successful! You can now share screenshots to Google Drive.';
+            statusEl.className = 'connection-status success';
+          } else {
+            statusEl.textContent = '✗ Connection failed: ' + (result?.error || 'Unknown error');
+            statusEl.className = 'connection-status error';
+          }
+        }
+      } catch (error) {
+        if (statusEl) {
+          statusEl.textContent = '✗ Connection test failed: ' + error.message;
+          statusEl.className = 'connection-status error';
+        }
+      }
+    });
+  }
+}
+
+// Load Google Drive client ID from storage
+function loadGoogleDriveClientId() {
+  if (typeof chrome !== 'undefined' && chrome.storage) {
+    chrome.storage.sync.get(['googleDriveClientId'], (result) => {
+      const clientIdInput = document.getElementById('gdrive-client-id');
+      if (clientIdInput && result.googleDriveClientId) {
+        clientIdInput.value = result.googleDriveClientId;
+      }
+    });
   }
 }
 
@@ -5253,85 +5452,252 @@ ${500 + base64Data.length}
   }
 }
 
-// Save current annotations as a template
-function saveTemplate() {
-  const templateName = prompt('Enter template name:', `Template ${savedTemplates.length + 1}`);
+// ===== GOOGLE DRIVE SHARE FUNCTIONS =====
 
-  if (!templateName) return;
+async function handleShareToGoogleDrive() {
+  const shareModal = document.getElementById('share-modal');
+  const shareStatus = document.getElementById('share-status');
+  const shareSuccess = document.getElementById('share-success');
+  const shareError = document.getElementById('share-error');
 
-  const template = {
-    name: templateName,
-    annotations: JSON.parse(JSON.stringify(annotations)), // Deep copy
-    timestamp: Date.now()
-  };
+  // Show modal with loading state
+  shareModal.classList.add('show');
+  shareStatus.style.display = 'block';
+  shareSuccess.style.display = 'none';
+  shareError.style.display = 'none';
 
-  savedTemplates.push(template);
+  try {
+    // Export screenshot as PNG blob (reuse existing logic)
+    const blob = await exportImageAsBlob('png');
 
-  // Save to chrome storage
-  chrome.storage.local.set({ annotationTemplates: savedTemplates }, () => {
-    console.log('Template saved:', templateName);
-    alert(`Template "${templateName}" saved successfully!`);
-  });
-}
+    // Convert blob to data URL for message passing
+    const reader = new FileReader();
+    const blobData = await new Promise((resolve, reject) => {
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
 
-// Load a template
-function loadTemplate(template) {
-  if (confirm(`Load template "${template.name}"? This will replace current annotations.`)) {
-    annotations = JSON.parse(JSON.stringify(template.annotations)); // Deep copy
-    selectedAnnotationIndex = -1;
-    redrawAnnotations();
-    saveState();
-    alert('Template loaded successfully!');
+    // Generate filename
+    const timestamp = Date.now();
+    const filename = `screenshot-annotated-${timestamp}.png`;
+
+    // Send to background script for upload
+    const result = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        {
+          action: 'shareToGoogleDrive',
+          blobData: blobData,
+          filename: filename
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        }
+      );
+    });
+
+    if (result.success) {
+      // Show success state
+      shareStatus.style.display = 'none';
+      shareSuccess.style.display = 'block';
+
+      const linkInput = document.getElementById('share-link-input');
+      if (linkInput) {
+        linkInput.value = result.link;
+      }
+    } else {
+      throw new Error(result.error || 'Upload failed');
+    }
+  } catch (error) {
+    console.error('Share error:', error);
+
+    // Show error state
+    shareStatus.style.display = 'none';
+    shareError.style.display = 'block';
+
+    const errorMessageEl = document.getElementById('share-error-message');
+    if (errorMessageEl) {
+      errorMessageEl.textContent = getUserFriendlyError(error);
+    }
   }
 }
 
-// Update template list UI
-function updateTemplateList() {
-  // Load templates from storage
-  chrome.storage.local.get(['annotationTemplates'], (result) => {
-    savedTemplates = result.annotationTemplates || [];
+function exportImageAsBlob(format) {
+  return new Promise((resolve, reject) => {
+    const canvas = document.getElementById('annotation-canvas');
+    const img = document.getElementById('screenshot-img');
 
-    const templateList = document.getElementById('template-list');
-    if (!templateList) return;
-
-    if (savedTemplates.length === 0) {
-      templateList.innerHTML = '<div style="padding: 8px; text-align: center; color: #aaa; font-size: 11px;">No templates saved</div>';
+    if (!canvas || !img) {
+      reject(new Error('Canvas or image not found'));
       return;
     }
 
-    templateList.innerHTML = savedTemplates.map((template, index) => `
-      <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-bottom: 1px solid #333;">
-        <button class="template-load-btn" data-index="${index}" style="flex: 1; text-align: left; background: none; border: none; color: #fff; cursor: pointer; font-size: 11px; padding: 4px;">
-          ${template.name}
-        </button>
-        <button class="template-delete-btn" data-index="${index}" style="background: #ff4444; border: none; color: #fff; cursor: pointer; font-size: 10px; padding: 2px 6px; border-radius: 3px;">×</button>
-      </div>
-    `).join('');
+    // Create export canvas (reuse logic from exportImage)
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = canvas.width;
+    finalCanvas.height = canvas.height;
+    const finalCtx = finalCanvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+    finalCtx.imageSmoothingEnabled = false;
 
-    // Attach event listeners to template buttons
-    templateList.querySelectorAll('.template-load-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const index = parseInt(e.currentTarget.dataset.index);
-        loadTemplate(savedTemplates[index]);
-        const templatesDropdownMenu = document.getElementById('templates-dropdown-menu');
-        if (templatesDropdownMenu) templatesDropdownMenu.classList.remove('show');
-      });
-    });
+    // Draw screenshot
+    finalCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    templateList.querySelectorAll('.template-delete-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const index = parseInt(e.currentTarget.dataset.index);
-        if (confirm(`Delete template "${savedTemplates[index].name}"?`)) {
-          savedTemplates.splice(index, 1);
-          chrome.storage.local.set({ annotationTemplates: savedTemplates }, () => {
-            updateTemplateList();
-          });
+    // Draw all annotations with proper transformations
+    const drawAnnotations = () => {
+      annotations.forEach(annotation => {
+        const bounds = getAnnotationBounds(annotation);
+        if (!bounds) return;
+
+        finalCtx.save();
+        const centerX = bounds.x + bounds.width / 2;
+        const centerY = bounds.y + bounds.height / 2;
+
+        if (bounds.rotation && bounds.rotation !== 0) {
+          finalCtx.translate(centerX, centerY);
+          finalCtx.rotate(bounds.rotation * Math.PI / 180);
+          finalCtx.translate(-centerX, -centerY);
         }
+
+        // Use shared helper for annotation rendering
+        if (annotation.type === 'text' || annotation.type === 'rectangle' ||
+            annotation.type === 'circle' || annotation.type === 'arrow' ||
+            annotation.type === 'freehand' || annotation.type === 'highlight' ||
+            annotation.type === 'emoji' || annotation.type === 'callout' ||
+            annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle' ||
+            annotation.type === 'line') {
+          renderAnnotationShape(finalCtx, annotation, bounds);
+          finalCtx.restore();
+          return;
+        }
+
+        // Draw blur
+        if (annotation.type === 'blur') {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = Math.max(1, Math.round(bounds.width));
+          tempCanvas.height = Math.max(1, Math.round(bounds.height));
+          const tempCtx = tempCanvas.getContext('2d');
+
+          tempCtx.drawImage(img, bounds.x, bounds.y, bounds.width, bounds.height, 0, 0, tempCanvas.width, tempCanvas.height);
+
+          const blurRadius = annotation.blurRadius || 10;
+          finalCtx.filter = `blur(${blurRadius}px)`;
+          finalCtx.drawImage(tempCanvas, bounds.x, bounds.y, bounds.width, bounds.height);
+          finalCtx.filter = 'none';
+        }
+
+        finalCtx.restore();
       });
+
+      // Convert to blob
+      finalCanvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to create blob'));
+        }
+      }, 'image/png');
+    };
+
+    // Wait for all arrow images to load before drawing
+    const loadPromises = [];
+    annotations.forEach(annotation => {
+      if (annotation.type === 'arrow' && annotation.arrowImage) {
+        const arrowImg = arrowImageCache[annotation.arrowImage];
+        if (arrowImg && arrowImg.complete && arrowImg.naturalWidth > 0) {
+          // Already loaded
+        } else if (arrowImagePromises[annotation.arrowImage]) {
+          loadPromises.push(arrowImagePromises[annotation.arrowImage]);
+        } else {
+          // Load it now
+          const newImg = new Image();
+          const promise = new Promise((resolve2, reject2) => {
+            newImg.onload = () => {
+              arrowImageCache[annotation.arrowImage] = newImg;
+              resolve2(newImg);
+            };
+            newImg.onerror = reject2;
+          });
+          newImg.src = getArrowImageURL(annotation.arrowImage);
+          loadPromises.push(promise);
+        }
+      }
     });
+
+    if (loadPromises.length === 0) {
+      drawAnnotations();
+    } else {
+      Promise.all(loadPromises).then(() => {
+        drawAnnotations();
+      }).catch((error) => {
+        console.error('Error loading arrow images:', error);
+        // Still try to draw what we can
+        drawAnnotations();
+      });
+    }
   });
 }
+
+
+function closeShareModal() {
+  const shareModal = document.getElementById('share-modal');
+  if (shareModal) {
+    shareModal.classList.remove('show');
+  }
+}
+
+async function handleSignOut() {
+  try {
+    const result = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { action: 'signOutGoogleDrive' },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        }
+      );
+    });
+
+    if (result.success) {
+      alert('Signed out successfully');
+      closeShareModal();
+    } else {
+      throw new Error(result.error || 'Sign out failed');
+    }
+  } catch (error) {
+    console.error('Sign out error:', error);
+    alert('Failed to sign out: ' + error.message);
+  }
+}
+
+function getUserFriendlyError(error) {
+  const message = error.message || error.toString();
+
+  if (message.includes('auth') || message.includes('token')) {
+    return 'Authentication failed. Please try again.';
+  }
+  if (message.includes('network') || message.includes('fetch')) {
+    return 'Network error. Please check your internet connection.';
+  }
+  if (message.includes('quota') || message.includes('limit')) {
+    return 'Google Drive storage quota exceeded.';
+  }
+  if (message.includes('size')) {
+    return 'Screenshot is too large to upload (max 10MB).';
+  }
+
+  return 'Upload failed: ' + message;
+}
+
+// ===== END GOOGLE DRIVE SHARE FUNCTIONS =====
+
+
 
 // ===== END v3.0 ENHANCEMENT FUNCTIONS =====
 

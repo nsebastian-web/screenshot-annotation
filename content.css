@@ -627,6 +627,134 @@
   padding-bottom: 8px;
 }
 
+.settings-subsection h4 {
+  margin: 16px 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ccc;
+}
+
+/* Google Drive Settings */
+.gdrive-setup-info {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.info-text {
+  color: #ccc;
+  font-size: 14px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.setup-steps {
+  margin-bottom: 16px;
+}
+
+.setup-steps details {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.setup-steps summary {
+  color: #0084ff;
+  font-size: 14px;
+  user-select: none;
+  outline: none;
+}
+
+.setup-steps summary:hover {
+  color: #0095ff;
+}
+
+.setup-list {
+  margin: 12px 0 0 0;
+  padding-left: 20px;
+  color: #ccc;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.setup-list li {
+  margin-bottom: 10px;
+}
+
+.setup-list ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.setup-list a {
+  color: #0084ff;
+  text-decoration: none;
+}
+
+.setup-list a:hover {
+  text-decoration: underline;
+}
+
+.setup-list code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #10b981;
+}
+
+.client-id-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.client-id-section label {
+  font-size: 14px;
+  color: #fff;
+  font-weight: 500;
+}
+
+.gdrive-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-family: monospace;
+  transition: all 0.2s;
+}
+
+.gdrive-input:focus {
+  outline: none;
+  border-color: #0084ff;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(0, 132, 255, 0.1);
+}
+
+.gdrive-input::placeholder {
+  color: #666;
+}
+
+.connection-status {
+  font-size: 13px;
+  color: #aaa;
+  margin-top: -4px;
+}
+
+.connection-status.success {
+  color: #10b981;
+}
+
+.connection-status.error {
+  color: #ef4444;
+}
+
 .shortcut-row {
   display: flex;
   justify-content: space-between;
@@ -753,6 +881,118 @@
   background: linear-gradient(135deg, #0095ff 0%, #0077dd 100%);
   box-shadow: 0 4px 14px rgba(0, 122, 255, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
   transform: translateY(-1px);
+}
+
+/* Share Modal Styles */
+#share-modal {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  z-index: 9999998 !important;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', sans-serif;
+}
+
+#share-modal.show {
+  display: flex;
+}
+
+.share-status {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.share-status p {
+  font-size: 16px;
+  color: #fff;
+  margin-bottom: 20px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #0084ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.share-success {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.success-message {
+  font-size: 18px;
+  color: #10b981;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+
+.share-link-container {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+#share-link-input {
+  flex: 1;
+  padding: 12px;
+  background: #2d2d2d;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-family: monospace;
+}
+
+#share-link-input:focus {
+  outline: none;
+  border-color: #0084ff;
+}
+
+.share-info {
+  font-size: 13px;
+  color: #aaa;
+  margin-top: 12px;
+}
+
+.share-error {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.error-message {
+  font-size: 18px;
+  color: #ef4444;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.error-detail {
+  font-size: 14px;
+  color: #ccc;
+  margin-bottom: 24px;
+}
+
+#share-retry-btn {
+  background: linear-gradient(135deg, #0084ff 0%, #0066cc 100%);
+  color: white;
+  border: none;
+}
+
+#share-retry-btn:hover {
+  background: linear-gradient(135deg, #0095ff 0%, #0077dd 100%);
 }
 
 /* Icon SVG Styling */
@@ -1098,18 +1338,5 @@
   border-color: #007AFF !important;
 }
 
-/* Template List Styles */
-#template-list {
-  font-size: 11px;
-}
-
-.template-load-btn:hover {
-  background: #3d3d3d;
-  text-decoration: underline;
-}
-
-.template-delete-btn:hover {
-  background: #cc0000;
-}
 
 /* ===== END v3.0 ENHANCEMENT STYLES ===== */

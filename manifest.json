@@ -9,11 +9,19 @@
     "tabs",
     "scripting",
     "windows",
-    "downloads"
+    "downloads",
+    "identity"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://www.googleapis.com/*"
   ],
+  "oauth2": {
+    "client_id": "240277286306-ned4im02rlkrt35v8gue4htdak5761sv.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.file"
+    ]
+  },
   "background": {
     "service_worker": "background.js"
   },
@@ -37,7 +45,8 @@
         "hand-drawn-arrows/arrow1.png",
         "hand-drawn-arrows/arrow2.png",
         "hand-drawn-arrows/arrow3.png",
-        "hand-drawn-arrows/arrow4.png"
+        "hand-drawn-arrows/arrow4.png",
+        "google-drive.js"
       ],
       "matches": ["<all_urls>"]
     }
