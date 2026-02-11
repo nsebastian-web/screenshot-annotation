@@ -36,6 +36,13 @@ class GoogleDriveUploader {
         `&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&scope=${encodeURIComponent(scope)}`;
 
+      console.log('OAuth Debug Info:', {
+        extensionId: chrome.runtime.id,
+        redirectUri: redirectUri,
+        clientId: clientId.substring(0, 20) + '...',
+        interactive: interactive
+      });
+
       // Launch OAuth flow
       const responseUrl = await new Promise((resolve, reject) => {
         const flowOptions = {
@@ -53,10 +60,21 @@ class GoogleDriveUploader {
           flowOptions,
           (responseUrl) => {
             if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
+              const errorMsg = chrome.runtime.lastError.message;
+              console.error('OAuth flow error:', errorMsg);
+
+              // Provide more helpful error messages
+              if (errorMsg.includes('did not approve') || errorMsg.includes('user cancelled')) {
+                reject(new Error('OAuth cancelled. Please click "Allow" on the consent screen to grant access.'));
+              } else if (errorMsg.includes('redirect_uri_mismatch')) {
+                reject(new Error(`Redirect URI mismatch. Make sure your Google Cloud OAuth client has this redirect URI: ${redirectUri}`));
+              } else {
+                reject(new Error(errorMsg));
+              }
             } else if (!responseUrl) {
               reject(new Error('No response from OAuth'));
             } else {
+              console.log('OAuth success, got response URL');
               resolve(responseUrl);
             }
           }
