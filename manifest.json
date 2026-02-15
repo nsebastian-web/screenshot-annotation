@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Screenshot & Annotation Tool",
-  "version": "6.0.0",
-  "description": "Professional screenshot tool with advanced annotations, opacity control, text formatting, numbered callouts, and multi-format export (PNG/JPG/PDF)",
+  "version": "7.0.0",
+  "description": "Professional screenshot tool with advanced annotations, full-page capture, Google Drive integration with folder organization, QR codes, batch operations, upload history, and multi-format export (PNG/JPG/PDF)",
   "permissions": [
     "activeTab",
     "storage",
@@ -10,11 +10,14 @@
     "scripting",
     "windows",
     "downloads",
-    "identity"
+    "identity",
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>",
-    "https://www.googleapis.com/*"
+    "https://www.googleapis.com/*",
+    "https://tinyurl.com/*",
+    "https://api.qrserver.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -52,6 +55,20 @@
         "mac": "Command+Shift+S"
       },
       "description": "Capture screenshot with annotations"
+    },
+    "capture-fullpage": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+F",
+        "mac": "Command+Shift+F"
+      },
+      "description": "Capture full page screenshot"
+    },
+    "capture-selection": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      },
+      "description": "Capture selected area only"
     }
   }
 }

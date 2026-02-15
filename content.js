@@ -4,6 +4,40 @@
 if (!window.screenshotAnnotationScriptLoaded) {
   window.screenshotAnnotationScriptLoaded = true;
 
+// ============================================================================
+// PRODUCTION LOGGER
+// ============================================================================
+const DEBUG_MODE = false; // Set to false for production
+const logger = {
+  log: (...args) => { if (DEBUG_MODE) console.log('[Content]', ...args); },
+  info: (...args) => { if (DEBUG_MODE) console.info('[Content]', ...args); },
+  warn: (...args) => console.warn('[Content]', ...args),
+  error: (...args) => console.error('[Content]', ...args)
+};
+
+// ============================================================================
+// MEMORY MANAGEMENT
+// ============================================================================
+// Cleanup canvas to prevent memory leaks
+function cleanupCanvas(canvas) {
+  if (!canvas) return;
+  try {
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    // Reset dimensions to minimal size to free memory
+    canvas.width = 1;
+    canvas.height = 1;
+    // Remove from DOM if attached
+    if (canvas.parentNode) {
+      canvas.parentNode.removeChild(canvas);
+    }
+  } catch (e) {
+    logger.warn('Canvas cleanup warning:', e);
+  }
+}
+
 let screenshotDataUrl = null;
 let annotations = [];
 let currentTool = 'select';
@@ -42,6 +76,7 @@ let lineArrowEnd = true; // Whether line has arrow at end (default true for arro
 let selectedTextBold = false; // Text formatting: bold
 let selectedTextItalic = false; // Text formatting: italic
 let selectedTextUnderline = false; // Text formatting: underline
+let magnifyZoomLevel = 2; // Default magnification zoom level (2x)
 
 // Platform detection
 const isMac = navigator.userAgent.toUpperCase().indexOf('MAC') >= 0;
@@ -88,6 +123,7 @@ let selectionStartY = 0;
 let selectionEndX = 0;
 let selectionEndY = 0;
 let selectionOverlay = null;
+let selectionMode = 'crop'; // 'crop' = select area after capture, 'capture' = select area before capture
 
 // Crop overlay variables
 let isCropping = false;
@@ -123,18 +159,18 @@ function preloadArrowImages() {
     const promise = new Promise((resolve, reject) => {
       img.onload = () => {
         arrowImageCache[arrowName] = img;
-        console.log(`Preloaded arrow image: ${arrowName}`, img.width, img.height);
+        logger.log(`Preloaded arrow image: ${arrowName}`, img.width, img.height);
         resolve(img);
       };
       img.onerror = (e) => {
-        console.error(`Failed to preload arrow image: ${arrowName}`, e);
-        console.error(`Failed URL: ${getArrowImageURL(arrowName)}`);
+        logger.error(`Failed to preload arrow image: ${arrowName}`, e);
+        logger.error(`Failed URL: ${getArrowImageURL(arrowName)}`);
         // Don't reject, just log - images can be loaded later
         resolve(null);
       };
     });
     const url = getArrowImageURL(arrowName);
-    console.log(`Preloading arrow image: ${arrowName} from ${url}`);
+    logger.log(`Preloading arrow image: ${arrowName} from ${url}`);
     img.src = url;
     arrowImagePromises[arrowName] = promise;
     // Store the image object immediately (will be updated on load)
@@ -238,33 +274,50 @@ function selectTool(toolName) {
   
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('Content script received message:', request);
+    logger.log('Content script received message:', request);
     if (request.action === 'startCapture') {
-      console.log('Starting area selection...');
+      logger.log('Starting area selection...');
       try {
         // Cancel any existing area selection
         if (isSelectingArea) {
           cancelAreaSelection();
         }
-        startAreaSelection();
+        // Pass mode from request (default to 'crop' for backward compatibility)
+        const mode = request.mode || 'crop';
+        startAreaSelection(mode);
         sendResponse({ success: true });
       } catch (error) {
-        console.error('Error starting area selection:', error);
+        logger.error('Error starting area selection:', error);
         sendResponse({ success: false, error: error.message });
       }
       return true; // Keep channel open for async response
     }
+
+    // Handle full-page capture
+    if (request.action === 'startFullPageCapture') {
+      logger.log('Starting full-page capture...');
+      try {
+        startFullPageCapture();
+        sendResponse({ success: true });
+      } catch (error) {
+        logger.error('Error starting full-page capture:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+      return true;
+    }
+
     return false;
   });
   
   // Signal that content script is ready
-  console.log('Screenshot annotation content script loaded and ready');
+  logger.log('Screenshot annotation content script loaded and ready');
 
-function startAreaSelection() {
+function startAreaSelection(mode = 'crop') {
   if (isSelectingArea) return;
-  
+
   isSelectingArea = true;
-  
+  selectionMode = mode; // Store mode for later use
+
   // Create selection overlay (iOS-style)
   const overlay = document.createElement('div');
   overlay.id = 'area-selection-overlay';
@@ -309,8 +362,14 @@ function startAreaSelection() {
     z-index: 999999;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   `;
-  instructions.textContent = 'Drag to select area • Release to capture';
-  
+
+  // Update instruction text based on mode
+  if (mode === 'capture') {
+    instructions.textContent = 'Drag to select area • Release to capture selection';
+  } else {
+    instructions.textContent = 'Drag to select area • Release to capture';
+  }
+
   overlay.appendChild(selectionBox);
   overlay.appendChild(instructions);
   document.body.appendChild(overlay);
@@ -396,10 +455,16 @@ function handleSelectionEnd(e) {
   
   const width = Math.abs(selectionEndX - selectionStartX);
   const height = Math.abs(selectionEndY - selectionStartY);
-  
+
   if (width > 10 && height > 10) {
-    // Valid selection, capture screenshot
-    captureSelectedArea();
+    // Valid selection - route based on mode
+    if (selectionMode === 'capture') {
+      // NEW: Selection-first mode - capture only selected area
+      captureSelectionOnly();
+    } else {
+      // EXISTING: Crop mode - capture full viewport then crop
+      captureSelectedArea();
+    }
   } else {
     // Selection too small, cancel
     cancelAreaSelection();
@@ -421,7 +486,7 @@ function cancelAreaSelection() {
 // ==================== CROP OVERLAY FUNCTIONS ====================
 
 function showCropOverlay() {
-  console.log('showCropOverlay() called, screenshotDataUrl:', screenshotDataUrl ? 'exists' : 'null');
+  logger.log('showCropOverlay() called, screenshotDataUrl:', screenshotDataUrl ? 'exists' : 'null');
   isCropping = true;
   uncropppedDataUrl = screenshotDataUrl;
 
@@ -836,7 +901,7 @@ async function captureSelectedArea() {
   chrome.runtime.sendMessage({ action: 'captureScreenshot' }, (response) => {
     
     if (chrome.runtime.lastError) {
-      console.error('Error capturing screenshot:', chrome.runtime.lastError);
+      logger.error('Error capturing screenshot:', chrome.runtime.lastError);
       alert('Error capturing screenshot: ' + chrome.runtime.lastError.message);
       isSelectingArea = false;
       return;
@@ -879,12 +944,392 @@ async function captureSelectedArea() {
       };
       img.src = response.dataUrl;
     } else {
-      console.error('Screenshot capture failed:', response);
+      logger.error('Screenshot capture failed:', response);
       alert('Failed to capture screenshot. ' + (response?.error || 'Unknown error'));
       isSelectingArea = false;
     }
   });
 }
+
+// Capture selection-only mode (select area first, then capture)
+async function captureSelectionOnly() {
+  // Get selection coordinates
+  const selectionBox = document.getElementById('selection-box');
+  if (!selectionBox) return;
+
+  const boxRect = selectionBox.getBoundingClientRect();
+
+  // Store coordinates before removing overlay
+  const selectionRect = {
+    left: boxRect.left,
+    top: boxRect.top,
+    width: boxRect.width,
+    height: boxRect.height
+  };
+
+  // Remove selection overlay BEFORE capturing
+  cancelAreaSelection();
+
+  // Wait for overlay removal
+  await new Promise(resolve => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(resolve, 50);
+      });
+    });
+  });
+
+  // Capture full viewport
+  chrome.runtime.sendMessage({ action: 'captureScreenshot' }, (response) => {
+    if (chrome.runtime.lastError) {
+      logger.error('Error capturing screenshot:', chrome.runtime.lastError);
+      alert('Error capturing screenshot: ' + chrome.runtime.lastError.message);
+      return;
+    }
+
+    if (response && response.success) {
+      // Immediately crop to selection and skip crop overlay
+      const img = new Image();
+      img.onload = () => {
+        // Calculate scale factor for high-DPI displays
+        const scaleX = img.naturalWidth / window.innerWidth;
+        const scaleY = img.naturalHeight / window.innerHeight;
+
+        // Create cropped canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(selectionRect.width * scaleX);
+        canvas.height = Math.round(selectionRect.height * scaleY);
+        const ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+        ctx.imageSmoothingEnabled = false;
+
+        // Draw cropped area
+        ctx.drawImage(
+          img,
+          Math.round(selectionRect.left * scaleX),
+          Math.round(selectionRect.top * scaleY),
+          Math.round(selectionRect.width * scaleX),
+          Math.round(selectionRect.height * scaleY),
+          0, 0,
+          canvas.width,
+          canvas.height
+        );
+
+        // Set as screenshot
+        screenshotDataUrl = canvas.toDataURL('image/png');
+
+        // Clean up canvas for memory
+        canvas.width = 1;
+        canvas.height = 1;
+
+        // Go directly to annotation overlay (skip crop overlay)
+        showAnnotationOverlay();
+      };
+      img.src = response.dataUrl;
+    } else {
+      alert('Failed to capture screenshot');
+    }
+  });
+}
+
+// ============================================================================
+// FULL-PAGE SCROLLING SCREENSHOT CAPTURE
+// ============================================================================
+
+// Calculate total page dimensions for full-page capture
+function calculatePageDimensions() {
+  const body = document.body;
+  const html = document.documentElement;
+
+  return {
+    scrollWidth: Math.max(
+      body.scrollWidth, html.scrollWidth,
+      body.offsetWidth, html.offsetWidth,
+      html.clientWidth
+    ),
+    scrollHeight: Math.max(
+      body.scrollHeight, html.scrollHeight,
+      body.offsetHeight, html.offsetHeight,
+      html.clientHeight
+    ),
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    originalScrollX: window.scrollX,
+    originalScrollY: window.scrollY
+  };
+}
+
+// Detect fixed/sticky positioned elements
+function detectFixedElements() {
+  const fixedElements = [];
+  const allElements = document.querySelectorAll('*');
+
+  allElements.forEach(el => {
+    const style = window.getComputedStyle(el);
+    if (style.position === 'fixed' || style.position === 'sticky') {
+      fixedElements.push({
+        element: el,
+        originalVisibility: style.visibility,
+        originalDisplay: style.display
+      });
+    }
+  });
+
+  return fixedElements;
+}
+
+// Hide fixed elements during capture
+function hideFixedElements(fixedElements) {
+  fixedElements.forEach(item => {
+    item.element.style.visibility = 'hidden';
+  });
+}
+
+// Restore fixed elements after capture
+function restoreFixedElements(fixedElements) {
+  fixedElements.forEach(item => {
+    item.element.style.visibility = item.originalVisibility;
+  });
+}
+
+// Create progress overlay for full-page capture
+function createProgressOverlay() {
+  const overlay = document.createElement('div');
+  overlay.id = 'fullpage-capture-progress';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 999999;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  `;
+
+  overlay.innerHTML = `
+    <div style="background: rgba(255,255,255,0.95); padding: 30px 40px; border-radius: 12px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-size: 16px; font-weight: 500; color: #333; margin-bottom: 16px;">
+        Capturing full page...
+      </div>
+      <div style="width: 300px; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden;">
+        <div id="progress-bar" style="width: 0%; height: 100%; background: #007AFF; transition: width 0.3s;"></div>
+      </div>
+      <div id="progress-text" style="font-size: 14px; color: #666; margin-top: 12px;">0%</div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+// Update progress bar
+function updateProgress(percent) {
+  const bar = document.getElementById('progress-bar');
+  const text = document.getElementById('progress-text');
+  if (bar) bar.style.width = percent + '%';
+  if (text) text.textContent = Math.round(percent) + '%';
+}
+
+// Remove progress overlay
+function removeProgressOverlay() {
+  const overlay = document.getElementById('fullpage-capture-progress');
+  if (overlay) overlay.remove();
+}
+
+// Wait for lazy-loaded images to finish loading
+async function waitForLazyImages(timeout = 2000) {
+  const images = document.querySelectorAll('img');
+  const promises = [];
+
+  images.forEach(img => {
+    if (!img.complete) {
+      promises.push(
+        new Promise(resolve => {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true });
+          setTimeout(resolve, timeout); // Timeout fallback
+        })
+      );
+    }
+  });
+
+  await Promise.all(promises);
+}
+
+// Capture page in chunks (scrolling through viewports)
+async function capturePageChunks(dimensions) {
+  const chunks = [];
+  const { scrollWidth, scrollHeight, viewportWidth, viewportHeight } = dimensions;
+
+  // Limit maximum page height to prevent crashes
+  const MAX_HEIGHT = 20000;
+  const captureHeight = Math.min(scrollHeight, MAX_HEIGHT);
+
+  // Calculate number of vertical captures needed
+  const numVerticalChunks = Math.ceil(captureHeight / viewportHeight);
+
+  // Hide fixed elements before capturing
+  const fixedElements = detectFixedElements();
+  hideFixedElements(fixedElements);
+
+  // Disable smooth scrolling temporarily
+  const originalScrollBehavior = document.documentElement.style.scrollBehavior;
+  document.documentElement.style.scrollBehavior = 'auto';
+
+  for (let i = 0; i < numVerticalChunks; i++) {
+    const scrollY = i * viewportHeight;
+
+    // Scroll to position
+    window.scrollTo(0, scrollY);
+
+    // Wait for scroll and any lazy-loaded content
+    // Chrome enforces MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND (~2 per second = 500ms minimum)
+    await new Promise(resolve => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(resolve, 600); // 600ms to safely stay under Chrome's rate limit
+        });
+      });
+    });
+
+    // Wait for lazy images at this scroll position
+    await waitForLazyImages();
+
+    // Capture viewport
+    const dataUrl = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ action: 'captureScreenshot' }, (response) => {
+        if (chrome.runtime.lastError || !response?.success) {
+          reject(new Error(response?.error || 'Capture failed'));
+        } else {
+          resolve(response.dataUrl);
+        }
+      });
+    });
+
+    chunks.push({
+      dataUrl,
+      offsetY: scrollY,
+      index: i
+    });
+
+    // Update progress
+    const progress = ((i + 1) / numVerticalChunks) * 100;
+    updateProgress(progress);
+  }
+
+  // Restore scroll behavior and fixed elements
+  document.documentElement.style.scrollBehavior = originalScrollBehavior;
+  restoreFixedElements(fixedElements);
+
+  return chunks;
+}
+
+// Stitch captured chunks together on large canvas
+function stitchImages(chunks, dimensions) {
+  const { scrollWidth, scrollHeight, viewportWidth, viewportHeight } = dimensions;
+
+  // Limit to MAX_HEIGHT
+  const MAX_HEIGHT = 20000;
+  const finalHeight = Math.min(scrollHeight, MAX_HEIGHT);
+
+  // Create large canvas for stitched image
+  const canvas = document.createElement('canvas');
+  canvas.width = viewportWidth;
+  canvas.height = finalHeight;
+
+  const ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+  ctx.imageSmoothingEnabled = false;
+
+  // Load and draw each chunk
+  return new Promise((resolve, reject) => {
+    let loadedCount = 0;
+
+    chunks.forEach((chunk, index) => {
+      const img = new Image();
+
+      img.onload = () => {
+        const offsetY = chunk.offsetY;
+        const drawHeight = Math.min(viewportHeight, finalHeight - offsetY);
+
+        // Draw chunk at correct Y position
+        ctx.drawImage(
+          img,
+          0, 0, viewportWidth, drawHeight, // Source
+          0, offsetY, viewportWidth, drawHeight // Destination
+        );
+
+        loadedCount++;
+
+        if (loadedCount === chunks.length) {
+          // All chunks stitched
+          const dataUrl = canvas.toDataURL('image/png');
+
+          // Clean up canvas for memory
+          canvas.width = 1;
+          canvas.height = 1;
+
+          resolve(dataUrl);
+        }
+      };
+
+      img.onerror = () => reject(new Error('Failed to load chunk ' + index));
+      img.src = chunk.dataUrl;
+    });
+  });
+}
+
+// Main entry point for full-page capture
+async function startFullPageCapture() {
+  try {
+    // Show progress overlay
+    const progressOverlay = createProgressOverlay();
+
+    // Calculate dimensions
+    const dimensions = calculatePageDimensions();
+
+    // Warn if page is too large
+    if (dimensions.scrollHeight > 20000) {
+      const proceed = confirm(
+        `This page is ${Math.round(dimensions.scrollHeight)}px tall. ` +
+        `Capturing will be limited to 20,000px for performance. Continue?`
+      );
+      if (!proceed) {
+        removeProgressOverlay();
+        return;
+      }
+    }
+
+    // Capture all chunks
+    const chunks = await capturePageChunks(dimensions);
+
+    // Stitch together
+    updateProgress(100);
+    const stitchedDataUrl = await stitchImages(chunks, dimensions);
+
+    // Restore original scroll position
+    window.scrollTo(dimensions.originalScrollX, dimensions.originalScrollY);
+
+    // Remove progress overlay
+    removeProgressOverlay();
+
+    // Set as screenshot and show crop overlay
+    screenshotDataUrl = stitchedDataUrl;
+    showCropOverlay();
+
+  } catch (error) {
+    removeProgressOverlay();
+    alert('Failed to capture full page: ' + error.message);
+    logger.error('Full-page capture error:', error);
+  }
+}
+
+// ============================================================================
+// END OF FULL-PAGE CAPTURE
+// ============================================================================
 
 function showAnnotationOverlay() {
   // Cancel any active area selection
@@ -947,7 +1392,16 @@ function showAnnotationOverlay() {
               <button class="dropdown-item" data-tool="filled-rectangle" title="Filled Rectangle">◼</button>
               <button class="dropdown-item" data-tool="circle" title="Circle">○</button>
               <button class="dropdown-item" data-tool="filled-circle" title="Filled Circle">●</button>
+              <button class="dropdown-item" data-tool="magnify" title="Magnifying Glass">${getIcon('zoomIn', 14)}</button>
               <div class="dropdown-section" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #4a4a4a;">
+                <label style="font-size: 10px; color: #aaa; margin-bottom: 4px;">Magnify Zoom</label>
+                <div style="display: flex; gap: 4px; align-items: center; margin-bottom: 8px;">
+                  <input type="range" id="magnify-zoom" min="1.5" max="5" value="2" step="0.5"
+                         style="width: 100px; cursor: pointer;" />
+                  <span id="magnify-zoom-display" style="font-size: 11px; color: #fff;">2x</span>
+                </div>
+              </div>
+              <div class="dropdown-section" style="padding-top: 8px; border-top: 1px solid #4a4a4a;">
                 <label style="font-size: 10px; color: #aaa; margin-bottom: 4px;">Line Arrows</label>
                 <div style="display: flex; gap: 8px; align-items: center;">
                   <label style="display: flex; align-items: center; gap: 4px; font-size: 11px;">
@@ -1338,7 +1792,14 @@ function showAnnotationOverlay() {
           <p class="success-message">✓ Screenshot shared successfully!</p>
           <div class="share-link-container">
             <input type="text" id="share-link-input" readonly />
-            <button id="copy-link-btn" class="settings-btn primary">Copy Link</button>
+          </div>
+          <div class="share-actions" style="display: flex; gap: 8px; margin-top: 12px;">
+            <button id="copy-link-btn" class="settings-btn primary" style="flex: 1;">
+              📋 Copy Link
+            </button>
+            <button id="open-drive-btn" class="settings-btn" style="flex: 1;">
+              🔗 Open in Drive
+            </button>
           </div>
           <p class="share-info">Anyone with this link can view your screenshot</p>
         </div>
@@ -1360,16 +1821,44 @@ function showAnnotationOverlay() {
   const img = document.getElementById('screenshot-img');
   const canvas = document.getElementById('annotation-canvas');
   const ctx = canvas.getContext('2d');
-  
+
   img.onload = () => {
-    canvas.width = img.width;
-    canvas.height = img.height;
+    // CRITICAL: Set canvas dimensions to match the NATURAL (full-resolution) image size
+    // This ensures 1:1 pixel mapping between canvas and image
+    // DO NOT use img.width (displayed size), use img.naturalWidth instead
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+
+    // Set CSS dimensions and position to EXACTLY match the displayed image
+    // This ensures the canvas overlays the image perfectly
+    const displayWidth = img.offsetWidth || img.naturalWidth;
+    const displayHeight = img.offsetHeight || img.naturalHeight;
+    canvas.style.width = displayWidth + 'px';
+    canvas.style.height = displayHeight + 'px';
+
+    // CRITICAL FIX: Position canvas to match image offset within container
+    // Image is centered in container, so canvas must match that offset
+    const imgRect = img.getBoundingClientRect();
+    const container = img.parentElement;
+    const containerRect = container.getBoundingClientRect();
+
+    const offsetLeft = imgRect.left - containerRect.left;
+    const offsetTop = imgRect.top - containerRect.top;
+
+    canvas.style.left = offsetLeft + 'px';
+    canvas.style.top = offsetTop + 'px';
+
+    logger.log('[Canvas Setup] Natural:', img.naturalWidth, 'x', img.naturalHeight,
+                'Display:', displayWidth, 'x', displayHeight,
+                'Canvas:', canvas.width, 'x', canvas.height,
+                'Offset:', offsetLeft, 'x', offsetTop);
+
     // Preload all arrow images when screenshot loads
     arrowImages.forEach(arrowName => {
       const arrowImg = new Image();
       arrowImg.onload = () => {
         arrowImageCache[arrowName] = arrowImg;
-        console.log(`Arrow preloaded in overlay: ${arrowName}`, arrowImg.width, arrowImg.height);
+        logger.log(`Arrow preloaded in overlay: ${arrowName}`, arrowImg.width, arrowImg.height);
         // Redraw if this arrow is being used
         const hasThisArrow = annotations.some(a => a.arrowImage === arrowName);
         if (hasThisArrow) {
@@ -1377,7 +1866,7 @@ function showAnnotationOverlay() {
         }
       };
       arrowImg.onerror = () => {
-        console.error(`Failed to preload arrow in overlay: ${arrowName}`);
+        logger.error(`Failed to preload arrow in overlay: ${arrowName}`);
       };
       arrowImg.src = getArrowImageURL(arrowName);
       // Store immediately
@@ -1562,6 +2051,17 @@ function showAnnotationOverlay() {
     blurIntensitySlider.addEventListener('input', (e) => {
       blurIntensity = parseInt(e.target.value);
       blurIntensityDisplay.textContent = `${blurIntensity}px`;
+    });
+  }
+
+  // Magnify zoom level slider
+  const magnifyZoomSlider = document.getElementById('magnify-zoom');
+  const magnifyZoomDisplay = document.getElementById('magnify-zoom-display');
+
+  if (magnifyZoomSlider && magnifyZoomDisplay) {
+    magnifyZoomSlider.addEventListener('input', (e) => {
+      magnifyZoomLevel = parseFloat(e.target.value);
+      magnifyZoomDisplay.textContent = `${magnifyZoomLevel}x`;
     });
   }
 
@@ -1919,10 +2419,15 @@ function showAnnotationOverlay() {
   if (saveDropdownToggle && saveDropdownMenu) {
     saveDropdownToggle.addEventListener('click', (e) => {
       e.stopPropagation();
+      const wasHidden = !saveDropdownMenu.classList.contains('show');
       saveDropdownMenu.classList.toggle('show');
       document.querySelectorAll('.dropdown-menu').forEach(menu => {
         if (menu !== saveDropdownMenu) menu.classList.remove('show');
       });
+      // Calculate file sizes when dropdown is opened
+      if (wasHidden) {
+        updateFileSizeEstimates();
+      }
     });
   }
 
@@ -1960,21 +2465,21 @@ function showAnnotationOverlay() {
   // Crop button
   const cropBtn = document.getElementById('cropBtn');
   if (cropBtn) {
-    console.log('✓ Crop button found, attaching event listener');
+    logger.log('✓ Crop button found, attaching event listener');
     cropBtn.addEventListener('click', (e) => {
-      console.log('Crop button clicked!');
+      logger.log('Crop button clicked!');
       e.preventDefault();
       e.stopPropagation();
       // Show crop overlay (reusing existing crop functionality)
       try {
         showCropOverlay();
-        console.log('✓ showCropOverlay() called successfully');
+        logger.log('✓ showCropOverlay() called successfully');
       } catch (error) {
-        console.error('✗ Error calling showCropOverlay():', error);
+        logger.error('✗ Error calling showCropOverlay():', error);
       }
     });
   } else {
-    console.error('✗ Crop button not found!');
+    logger.error('✗ Crop button not found!');
   }
 
   // Zoom controls - will implement zoom functionality
@@ -2180,24 +2685,24 @@ function showAnnotationOverlay() {
   const clearBtn = document.getElementById('clearBtn');
   const closeBtn = document.getElementById('closeBtn');
 
-  console.log('Button elements found:', { copyBtn: !!copyBtn, clearBtn: !!clearBtn, closeBtn: !!closeBtn });
+  logger.log('Button elements found:', { copyBtn: !!copyBtn, clearBtn: !!clearBtn, closeBtn: !!closeBtn });
 
   if (copyBtn) {
     copyBtn.addEventListener('click', () => {
-      console.log('Copy button clicked');
+      logger.log('Copy button clicked');
       copyToClipboard();
     });
   } else {
-    console.error('Copy button not found!');
+    logger.error('Copy button not found!');
   }
 
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
-      console.log('Clear button clicked');
+      logger.log('Clear button clicked');
       clearAnnotations();
     });
   } else {
-    console.error('Clear button not found!');
+    logger.error('Clear button not found!');
   }
 
   // Note: Save button is now a dropdown (save-dropdown-toggle) with separate format buttons
@@ -2205,18 +2710,18 @@ function showAnnotationOverlay() {
 
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
-      console.log('Close button clicked');
+      logger.log('Close button clicked');
       closeOverlay();
     });
   } else {
-    console.error('Close button not found!');
+    logger.error('Close button not found!');
   }
 
   // Share button and modal handlers
   const shareBtn = document.getElementById('shareBtn');
   if (shareBtn) {
     shareBtn.addEventListener('click', async () => {
-      console.log('Share button clicked');
+      logger.log('Share button clicked');
       await handleShareToGoogleDrive();
     });
   }
@@ -2235,19 +2740,41 @@ function showAnnotationOverlay() {
     });
   }
 
-  // Copy link button
+  // Copy link button (modern clipboard API)
   const copyLinkBtn = document.getElementById('copy-link-btn');
   if (copyLinkBtn) {
-    copyLinkBtn.addEventListener('click', () => {
+    copyLinkBtn.addEventListener('click', async () => {
       const linkInput = document.getElementById('share-link-input');
-      if (linkInput) {
-        linkInput.select();
-        document.execCommand('copy');
-        const originalText = copyLinkBtn.textContent;
-        copyLinkBtn.textContent = 'Copied!';
-        setTimeout(() => {
-          copyLinkBtn.textContent = originalText;
-        }, 2000);
+      if (linkInput && linkInput.value) {
+        try {
+          await navigator.clipboard.writeText(linkInput.value);
+          const originalText = copyLinkBtn.innerHTML;
+          copyLinkBtn.innerHTML = '✓ Copied!';
+          copyLinkBtn.style.background = '#34C759';
+          setTimeout(() => {
+            copyLinkBtn.innerHTML = originalText;
+            copyLinkBtn.style.background = '';
+          }, 2000);
+        } catch (error) {
+          // Fallback to older method
+          linkInput.select();
+          document.execCommand('copy');
+          copyLinkBtn.innerHTML = '✓ Copied!';
+          setTimeout(() => {
+            copyLinkBtn.innerHTML = '📋 Copy Link';
+          }, 2000);
+        }
+      }
+    });
+  }
+
+  // Open in Drive button
+  const openDriveBtn = document.getElementById('open-drive-btn');
+  if (openDriveBtn) {
+    openDriveBtn.addEventListener('click', () => {
+      const fullLink = openDriveBtn.dataset.fullLink;
+      if (fullLink) {
+        window.open(fullLink, '_blank');
       }
     });
   }
@@ -2313,7 +2840,7 @@ function loadKeyboardShortcuts() {
 function saveKeyboardShortcuts() {
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.set({ keyboardShortcuts: userShortcuts }, () => {
-      console.log('Keyboard shortcuts saved');
+      logger.log('Keyboard shortcuts saved');
     });
   }
 }
@@ -2358,7 +2885,7 @@ function setupSettingsModal() {
   const saveBtn = document.getElementById('settings-save-btn');
   const resetBtn = document.getElementById('settings-reset-btn');
 
-  console.log('Settings elements found:', {
+  logger.log('Settings elements found:', {
     settingsBtn: !!settingsBtn,
     settingsModal: !!settingsModal,
     closeBtn: !!closeBtn,
@@ -2367,7 +2894,7 @@ function setupSettingsModal() {
   });
 
   if (!settingsBtn || !settingsModal || !closeBtn || !saveBtn || !resetBtn) {
-    console.error('Settings modal elements not found:', {
+    logger.error('Settings modal elements not found:', {
       settingsBtn: !!settingsBtn,
       settingsModal: !!settingsModal,
       closeBtn: !!closeBtn,
@@ -2379,7 +2906,7 @@ function setupSettingsModal() {
 
   // Open settings
   settingsBtn.addEventListener('click', () => {
-    console.log('Settings button clicked - opening modal with bulletproof method');
+    logger.log('Settings button clicked - opening modal with bulletproof method');
 
     // Method 1: Use cssText for highest priority
     settingsModal.style.cssText = `
@@ -2407,14 +2934,14 @@ function setupSettingsModal() {
 
     // Use requestAnimationFrame to ensure paint happens
     requestAnimationFrame(() => {
-      console.log('Settings modal shown, updating shortcuts');
+      logger.log('Settings modal shown, updating shortcuts');
       updateShortcutInputs();
 
       // Verify rendering after paint
       requestAnimationFrame(() => {
         const computedStyle = window.getComputedStyle(settingsModal);
         const rect = settingsModal.getBoundingClientRect();
-        console.log('Settings modal computed styles:', {
+        logger.log('Settings modal computed styles:', {
           display: computedStyle.display,
           zIndex: computedStyle.zIndex,
           visibility: computedStyle.visibility,
@@ -2467,9 +2994,9 @@ function setupSettingsModal() {
           shortcut: defaultCaptureShortcut
         }, (response) => {
           if (response && response.success) {
-            console.log('Capture screenshot shortcut reset to:', defaultCaptureShortcut);
+            logger.log('Capture screenshot shortcut reset to:', defaultCaptureShortcut);
           } else {
-            console.error('Error resetting capture shortcut:', response ? response.error : 'Unknown error');
+            logger.error('Error resetting capture shortcut:', response ? response.error : 'Unknown error');
           }
         });
       }
@@ -2549,7 +3076,7 @@ function handleShortcutRecording(e) {
           if (response && response.success) {
             inputElement.value = chromeShortcut;
             inputElement.dataset.originalShortcut = chromeShortcut;
-            console.log('Capture screenshot shortcut updated:', chromeShortcut);
+            logger.log('Capture screenshot shortcut updated:', chromeShortcut);
           } else {
             const errorMsg = response && response.error ? response.error : 'Unknown error';
             alert(`Error setting shortcut: ${errorMsg}\n\nNote: Some shortcuts may be reserved by Chrome or your system.`);
@@ -2793,7 +3320,7 @@ function getAnnotationBounds(annotation) {
   }
 
   if (annotation.type === 'rectangle' || annotation.type === 'circle' || annotation.type === 'blur' ||
-      annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle') {
+      annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle' || annotation.type === 'magnify') {
     return {
       x: annotation.x,
       y: annotation.y,
@@ -2911,13 +3438,31 @@ function getResizeHandle(x, y, bounds) {
   return null;
 }
 
+// Helper function to convert mouse event coordinates to canvas coordinates
+// Accounts for canvas being displayed at a different size than its internal resolution
+function getCanvasCoordinates(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const displayX = e.clientX - rect.left;
+  const displayY = e.clientY - rect.top;
+
+  // Scale from display coordinates to canvas internal coordinates
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  return {
+    x: displayX * scaleX,
+    y: displayY * scaleY
+  };
+}
+
 function handleMouseDown(e) {
   e.preventDefault();
   e.stopPropagation();
-  
-  const rect = e.target.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+
+  const canvas = e.target;
+  const coords = getCanvasCoordinates(e, canvas);
+  const x = coords.x;
+  const y = coords.y;
   
   // Reset hover state on mouse down
   hoveredHandle = null;
@@ -3202,6 +3747,41 @@ function handleMouseDown(e) {
     // Don't save state here - will save when shape drawing is complete
     return;
   }
+
+  // Magnifying Glass tool - start drawing magnifier
+  if (currentTool === 'magnify') {
+    // Make sure we're not in area selection mode
+    if (isSelectingArea) {
+      cancelAreaSelection();
+    }
+
+    isDrawingShape = true;
+    shapeStartX = x;
+    shapeStartY = y;
+
+    const magnifyAnnotation = {
+      type: 'magnify',
+      x: x,
+      y: y,
+      width: 0,
+      height: 0,
+      // Source region (what to magnify) - will be calculated during resize
+      sourceX: x,  // Will be recalculated on mouse move
+      sourceY: y,  // Will be recalculated on mouse move
+      sourceWidth: 0,  // Will be width / zoomLevel
+      sourceHeight: 0,  // Will be height / zoomLevel
+      zoomLevel: magnifyZoomLevel,
+      borderColor: '#000000',
+      borderWidth: 3,
+      opacity: selectedOpacity,
+      rotation: 0
+    };
+
+    annotations.push(magnifyAnnotation);
+    selectedAnnotationIndex = annotations.length - 1;
+    // Don't save state here - will save when shape drawing is complete
+    return;
+  }
   
   // Blur tool - start drawing blur area
   if (currentTool === 'blur') {
@@ -3323,9 +3903,10 @@ function hideDimensionDisplay() {
 }
 
 function handleMouseMove(e) {
-  const rect = e.target.getBoundingClientRect();
-  const currentX = e.clientX - rect.left;
-  const currentY = e.clientY - rect.top;
+  const canvas = e.target;
+  const coords = getCanvasCoordinates(e, canvas);
+  const currentX = coords.x;
+  const currentY = coords.y;
   
   if (isRotating && selectedAnnotationIndex >= 0) {
     const annotation = annotations[selectedAnnotationIndex];
@@ -3455,7 +4036,16 @@ function handleMouseMove(e) {
         annotation.fontSize = Math.max(12, annotation.startFontSize * scaleFactor);
       }
     }
-    
+
+    // For magnifying glass, recalculate source region when resizing
+    if (annotation.type === 'magnify' && annotation.width > 0 && annotation.height > 0) {
+      annotation.sourceWidth = annotation.width / (annotation.zoomLevel || 2);
+      annotation.sourceHeight = annotation.height / (annotation.zoomLevel || 2);
+      // Center source region on the magnifier's current position
+      annotation.sourceX = annotation.x + (annotation.width - annotation.sourceWidth) / 2;
+      annotation.sourceY = annotation.y + (annotation.height - annotation.sourceHeight) / 2;
+    }
+
     // Show dimension display
     const bounds = getAnnotationBounds(annotation);
     showDimensionDisplay(bounds.x, bounds.y, bounds.width, bounds.height, bounds.rotation);
@@ -3463,7 +4053,7 @@ function handleMouseMove(e) {
     return;
   }
   
-  // Handle shape drawing (rectangle/circle/blur/filled-rectangle/filled-circle)
+  // Handle shape drawing (rectangle/circle/blur/filled-rectangle/filled-circle/magnify)
   if (isDrawingShape && selectedAnnotationIndex >= 0) {
     const annotation = annotations[selectedAnnotationIndex];
 
@@ -3489,6 +4079,17 @@ function handleMouseMove(e) {
         const size = Math.max(annotation.width, annotation.height);
         annotation.width = size;
         annotation.height = size;
+      }
+
+      // For magnifying glass, update source region based on size and zoom level
+      if (annotation.type === 'magnify') {
+        // Source region is smaller than display region based on zoom level
+        annotation.sourceWidth = annotation.width / annotation.zoomLevel;
+        annotation.sourceHeight = annotation.height / annotation.zoomLevel;
+        // Center source region on the magnifier's current position
+        // This ensures the magnifier shows what's underneath it
+        annotation.sourceX = annotation.x + (annotation.width - annotation.sourceWidth) / 2;
+        annotation.sourceY = annotation.y + (annotation.height - annotation.sourceHeight) / 2;
       }
     }
 
@@ -3520,6 +4121,16 @@ function handleMouseMove(e) {
     const annotation = annotations[selectedAnnotationIndex];
     annotation.x = currentX - dragOffsetX;
     annotation.y = currentY - dragOffsetY;
+
+    // Update magnifier source region when dragging
+    if (annotation.type === 'magnify' && annotation.width && annotation.height) {
+      annotation.sourceWidth = annotation.width / annotation.zoomLevel;
+      annotation.sourceHeight = annotation.height / annotation.zoomLevel;
+      // Center source region on the magnifier's current position
+      annotation.sourceX = annotation.x + (annotation.width - annotation.sourceWidth) / 2;
+      annotation.sourceY = annotation.y + (annotation.height - annotation.sourceHeight) / 2;
+    }
+
     redrawAnnotations();
     return;
   }
@@ -3670,12 +4281,17 @@ function handleMouseUp(e) {
 }
 
 function handleCanvasClick(e) {
+  const canvas = e.target;
+  const coords = getCanvasCoordinates(e, canvas);
+  const x = coords.x;
+  const y = coords.y;
+
   // Don't add arrow if we're in select mode and clicked on an annotation
   if (currentTool === 'select') {
     // Selection is handled in handleMouseDown
     return;
   }
-  
+
   // Arrow tool now uses drag-to-create (handled in handleMouseDown/Move/Up)
   // Old click-to-place behavior removed in favor of professional drag-to-create workflow
 
@@ -3683,14 +4299,10 @@ function handleCanvasClick(e) {
     e.preventDefault();
     e.stopPropagation();
 
-    const rect = e.target.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
     // Capture emoji before switching tools
     const emoji = selectedEmoji;
 
-    // Add new emoji annotation
+    // Add new emoji annotation (x,y already calculated at function start)
     annotations.push({
       type: 'emoji',
       emoji: emoji,
@@ -3723,8 +4335,9 @@ function startTextEditing(annotation) {
   const img = document.getElementById('screenshot-img');
   const imgRect = img.getBoundingClientRect();
   const bounds = getAnnotationBounds(annotation);
-  
-  // Calculate scale factor (canvas might be scaled to fit)
+
+  // Calculate scale factor from canvas coordinates to display coordinates
+  // Canvas is at full resolution (natural size), display is scaled down
   const scaleX = canvasRect.width / canvas.width;
   const scaleY = canvasRect.height / canvas.height;
   
@@ -4061,6 +4674,65 @@ function renderAnnotationShape(ctx, annotation, bounds, options = {}) {
     return true;
   }
 
+  // Draw magnifying glass (zoom/loupe tool)
+  if (annotation.type === 'magnify') {
+    const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
+    const zoomLevel = annotation.zoomLevel || 2;
+    const borderColor = annotation.borderColor || '#000000';
+    const borderWidth = annotation.borderWidth || 3;
+
+    // Get the screenshot image
+    const img = document.getElementById('screenshot-img');
+    if (!img || !img.complete || img.naturalWidth === 0) {
+      return false;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = opacity;
+
+    // Create circular clip path for magnifier
+    const radiusX = bounds.width / 2;
+    const radiusY = bounds.height / 2;
+    const cx = bounds.x + radiusX;
+    const cy = bounds.y + radiusY;
+
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Calculate source region (what to magnify)
+    // Since canvas is now at full resolution (1:1 with image), no coordinate scaling needed
+    const sourceX = annotation.sourceX !== undefined ? annotation.sourceX : annotation.x;
+    const sourceY = annotation.sourceY !== undefined ? annotation.sourceY : annotation.y;
+    const sourceWidth = annotation.sourceWidth !== undefined ? annotation.sourceWidth : (bounds.width / zoomLevel);
+    const sourceHeight = annotation.sourceHeight !== undefined ? annotation.sourceHeight : (bounds.height / zoomLevel);
+
+    // Draw the magnified portion directly from the image
+    // Source and destination are both in the same coordinate space (natural resolution)
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(
+      img,
+      sourceX, sourceY, sourceWidth, sourceHeight,  // Source region from image
+      bounds.x, bounds.y, bounds.width, bounds.height  // Destination (magnifier on canvas)
+    );
+
+    ctx.restore();
+
+    // Draw border around magnifier
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = borderWidth;
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.globalAlpha = 1.0;
+    return true;
+  }
+
   // Draw numbered callout (v3.0: new feature)
   if (annotation.type === 'callout') {
     const opacity = annotation.opacity !== undefined ? annotation.opacity : 1.0;
@@ -4340,6 +5012,15 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     return;
   }
 
+  if (annotation.type === 'magnify') {
+    renderAnnotationShape(ctx, annotation, bounds);
+    ctx.restore();
+    if (isSelected) {
+      drawSelectionHandles(ctx, bounds);
+    }
+    return;
+  }
+
   if (annotation.type === 'emoji') {
     renderAnnotationShape(ctx, annotation, bounds);
     ctx.restore();
@@ -4392,7 +5073,7 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
         } else if (retryCount < maxRetries) {
           setTimeout(checkImage, 50);
         } else {
-          console.warn('Blur image failed to load after maximum retries');
+          logger.warn('Blur image failed to load after maximum retries');
         }
       };
       checkImage();
@@ -4400,24 +5081,12 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
       return;
     }
     
-    // Calculate scale factors (annotation canvas coordinates to image natural dimensions)
-    // The canvas width/height should match the displayed image dimensions
-    const canvasWidth = annotationCanvas.width;
-    const canvasHeight = annotationCanvas.height;
-    
-    if (canvasWidth === 0 || canvasHeight === 0) {
-      ctx.restore();
-      return;
-    }
-    
-    const scaleX = img.naturalWidth / canvasWidth;
-    const scaleY = img.naturalHeight / canvasHeight;
-    
-    // Source coordinates on the original image (natural size)
-    const srcX = Math.max(0, Math.min(bounds.x * scaleX, img.naturalWidth - 1));
-    const srcY = Math.max(0, Math.min(bounds.y * scaleY, img.naturalHeight - 1));
-    const srcWidth = Math.max(1, Math.min(bounds.width * scaleX, img.naturalWidth - srcX));
-    const srcHeight = Math.max(1, Math.min(bounds.height * scaleY, img.naturalHeight - srcY));
+    // Since canvas is now at full resolution (1:1 with image), coordinates match directly
+    // No scaling needed between canvas and image coordinates
+    const srcX = Math.max(0, Math.min(bounds.x, img.naturalWidth - 1));
+    const srcY = Math.max(0, Math.min(bounds.y, img.naturalHeight - 1));
+    const srcWidth = Math.max(1, Math.min(bounds.width, img.naturalWidth - srcX));
+    const srcHeight = Math.max(1, Math.min(bounds.height, img.naturalHeight - srcY));
     
     // Create a temporary canvas to apply blur
     const tempCanvas = document.createElement('canvas');
@@ -4429,7 +5098,7 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     try {
       tempCtx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, tempCanvas.width, tempCanvas.height);
     } catch (e) {
-      console.error('Error drawing image to temp canvas for blur:', e, {
+      logger.error('Error drawing image to temp canvas for blur:', e, {
         img: img,
         srcX, srcY, srcWidth, srcHeight,
         naturalWidth: img.naturalWidth,
@@ -4531,7 +5200,7 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
         }
         return; // Successfully drawn
       } catch (e) {
-        console.error('Error drawing arrow image:', e, 'Image:', img, 'Bounds:', bounds);
+        logger.error('Error drawing arrow image:', e, 'Image:', img, 'Bounds:', bounds);
       }
     }
     
@@ -4542,7 +5211,7 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     
     // Set up load handler BEFORE setting src
     newImg.onload = function() {
-      console.log(`✓ Arrow image LOADED: ${arrowName}`, {
+      logger.log(`✓ Arrow image LOADED: ${arrowName}`, {
         width: newImg.width,
         height: newImg.height,
         naturalWidth: newImg.naturalWidth,
@@ -4558,7 +5227,7 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     };
     
     newImg.onerror = function(e) {
-      console.error(`✗ Failed to load arrow: ${arrowName}`, {
+      logger.error(`✗ Failed to load arrow: ${arrowName}`, {
         error: e,
             url: getArrowImageURL(arrowName)
       });
@@ -4568,7 +5237,7 @@ function drawAnnotation(ctx, annotation, isSelected = false) {
     
       // Load the image
       const url = getArrowImageURL(arrowName);
-      console.log(`→ Loading arrow: ${arrowName} from ${url}`);
+      logger.log(`→ Loading arrow: ${arrowName} from ${url}`);
       newImg.src = url;
     
     // Store immediately (will be updated when loaded)
@@ -4823,14 +5492,14 @@ function clearAnnotations() {
 }
 
 function showSaveAsDialog() {
-  console.log('showSaveAsDialog called');
+  logger.log('showSaveAsDialog called');
   const container = document.getElementById('filename-input-container');
   const input = document.getElementById('filename-input');
 
-  console.log('Save dialog elements:', { container: !!container, input: !!input });
+  logger.log('Save dialog elements:', { container: !!container, input: !!input });
 
   if (!container || !input) {
-    console.error('Save dialog elements not found!');
+    logger.error('Save dialog elements not found!');
     return;
   }
 
@@ -4841,7 +5510,7 @@ function showSaveAsDialog() {
   const defaultName = `screenshot-${dateStr}-${timeStr}`;
   input.value = defaultName;
 
-  console.log('Showing save dialog with bulletproof method');
+  logger.log('Showing save dialog with bulletproof method');
 
   // Method 1: Use cssText for highest priority
   container.style.cssText = `
@@ -4870,7 +5539,7 @@ function showSaveAsDialog() {
 
   // Use requestAnimationFrame to ensure paint happens
   requestAnimationFrame(() => {
-    console.log('Dialog shown, focus and select input');
+    logger.log('Dialog shown, focus and select input');
     input.focus();
     input.select();
 
@@ -4878,7 +5547,7 @@ function showSaveAsDialog() {
     requestAnimationFrame(() => {
       const computedStyle = window.getComputedStyle(container);
       const rect = container.getBoundingClientRect();
-      console.log('Save dialog computed styles:', {
+      logger.log('Save dialog computed styles:', {
         display: computedStyle.display,
         zIndex: computedStyle.zIndex,
         visibility: computedStyle.visibility,
@@ -4944,69 +5613,70 @@ function saveScreenshot(filename = null) {
   });
   
   const drawAnnotations = () => {
+    // Canvas is at full resolution (1:1 with image), so no scaling needed
+    // Annotations are already in the correct coordinate space
     annotations.forEach(annotation => {
       const bounds = getAnnotationBounds(annotation);
       if (!bounds) return;
 
+      // Use bounds directly - no scaling needed since canvas = natural resolution
+      const scaledBounds = bounds;
+
       finalCtx.save();
 
-      const centerX = bounds.x + bounds.width / 2;
-      const centerY = bounds.y + bounds.height / 2;
+      const centerX = scaledBounds.x + scaledBounds.width / 2;
+      const centerY = scaledBounds.y + scaledBounds.height / 2;
 
       // Apply rotation
-      if (bounds.rotation && bounds.rotation !== 0) {
+      if (scaledBounds.rotation && scaledBounds.rotation !== 0) {
         finalCtx.translate(centerX, centerY);
-        finalCtx.rotate(bounds.rotation * Math.PI / 180);
+        finalCtx.rotate(scaledBounds.rotation * Math.PI / 180);
         finalCtx.translate(-centerX, -centerY);
       }
 
-      // Use shared helper for text, rectangle, circle, arrow, freehand, highlight, emoji, and callout
+      // Use shared helper for text, rectangle, circle, arrow, freehand, highlight, emoji, callout, and filled shapes
       if (annotation.type === 'text' || annotation.type === 'rectangle' ||
           annotation.type === 'circle' || annotation.type === 'arrow' ||
           annotation.type === 'freehand' || annotation.type === 'highlight' ||
-          annotation.type === 'emoji' || annotation.type === 'callout') {
-        renderAnnotationShape(finalCtx, annotation, bounds);
+          annotation.type === 'emoji' || annotation.type === 'callout' ||
+          annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle' ||
+          annotation.type === 'magnify' ||
+          annotation.type === 'line') {
+        renderAnnotationShape(finalCtx, annotation, scaledBounds);
         finalCtx.restore();
         return;
       }
 
-      // Draw blur (requires special handling for canvas scaling)
+      // Draw blur (canvas is at full resolution, coordinates match 1:1)
       if (annotation.type === 'blur') {
         const img = document.getElementById('screenshot-img');
         if (img) {
-          const annotationCanvas = document.getElementById('annotation-canvas');
-          if (annotationCanvas) {
-            const scaleX = img.naturalWidth / annotationCanvas.width;
-            const scaleY = img.naturalHeight / annotationCanvas.height;
+          // No scaling needed - canvas coordinates = image coordinates
+          const srcX = bounds.x;
+          const srcY = bounds.y;
+          const srcWidth = bounds.width;
+          const srcHeight = bounds.height;
 
-            const srcX = bounds.x * scaleX;
-            const srcY = bounds.y * scaleY;
-            const srcWidth = bounds.width * scaleX;
-            const srcHeight = bounds.height * scaleY;
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = Math.max(1, Math.round(srcWidth));
+          tempCanvas.height = Math.max(1, Math.round(srcHeight));
+          const tempCtx = tempCanvas.getContext('2d');
 
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = Math.max(1, Math.round(srcWidth));
-            tempCanvas.height = Math.max(1, Math.round(srcHeight));
-            const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, tempCanvas.width, tempCanvas.height);
 
-            tempCtx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, tempCanvas.width, tempCanvas.height);
+          const blurRadius = annotation.blurRadius || 10;
+          finalCtx.filter = `blur(${blurRadius}px)`;
 
-            const blurRadius = annotation.blurRadius || 10;
-            finalCtx.filter = `blur(${blurRadius}px)`;
+          // Draw at the same coordinates - no scaling needed
+          finalCtx.drawImage(
+            tempCanvas,
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height
+          );
 
-            const finalScaleX = finalCanvas.width / annotationCanvas.width;
-            const finalScaleY = finalCanvas.height / annotationCanvas.height;
-
-            finalCtx.drawImage(
-              tempCanvas,
-              bounds.x * finalScaleX,
-              bounds.y * finalScaleY,
-              bounds.width * finalScaleX,
-              bounds.height * finalScaleY
-            );
-
-            finalCtx.filter = 'none';
-          }
+          finalCtx.filter = 'none';
         }
       }
 
@@ -5047,7 +5717,7 @@ function saveScreenshot(filename = null) {
     Promise.all(loadPromises).then(() => {
       drawAnnotations();
     }).catch((error) => {
-      console.error('Error loading arrow images:', error);
+      logger.error('Error loading arrow images:', error);
       // Still try to draw what we can
       drawAnnotations();
     });
@@ -5069,69 +5739,69 @@ function copyToClipboard() {
   finalCtx.drawImage(img, 0, 0);
 
   const drawAnnotationsAndCopy = () => {
+    // Canvas is at full resolution (1:1 with image), so no scaling needed
     annotations.forEach(annotation => {
       const bounds = getAnnotationBounds(annotation);
       if (!bounds) return;
 
+      // Use bounds directly - no scaling needed
+      const scaledBounds = bounds;
+
       finalCtx.save();
 
-      const centerX = bounds.x + bounds.width / 2;
-      const centerY = bounds.y + bounds.height / 2;
+      const centerX = scaledBounds.x + scaledBounds.width / 2;
+      const centerY = scaledBounds.y + scaledBounds.height / 2;
 
       // Apply rotation
-      if (bounds.rotation && bounds.rotation !== 0) {
+      if (scaledBounds.rotation && scaledBounds.rotation !== 0) {
         finalCtx.translate(centerX, centerY);
-        finalCtx.rotate(bounds.rotation * Math.PI / 180);
+        finalCtx.rotate(scaledBounds.rotation * Math.PI / 180);
         finalCtx.translate(-centerX, -centerY);
       }
 
-      // Use shared helper for text, rectangle, circle, arrow, freehand, highlight, emoji, and callout
+      // Use shared helper for text, rectangle, circle, arrow, freehand, highlight, emoji, callout, and filled shapes
       if (annotation.type === 'text' || annotation.type === 'rectangle' ||
           annotation.type === 'circle' || annotation.type === 'arrow' ||
           annotation.type === 'freehand' || annotation.type === 'highlight' ||
-          annotation.type === 'emoji' || annotation.type === 'callout') {
-        renderAnnotationShape(finalCtx, annotation, bounds);
+          annotation.type === 'emoji' || annotation.type === 'callout' ||
+          annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle' ||
+          annotation.type === 'magnify' ||
+          annotation.type === 'line') {
+        renderAnnotationShape(finalCtx, annotation, scaledBounds);
         finalCtx.restore();
         return;
       }
 
-      // Draw blur (requires special handling for canvas scaling)
+      // Draw blur (canvas is at full resolution, coordinates match 1:1)
       if (annotation.type === 'blur') {
         const blurImg = document.getElementById('screenshot-img');
         if (blurImg) {
-          const annotationCanvas = document.getElementById('annotation-canvas');
-          if (annotationCanvas) {
-            const scaleX = blurImg.naturalWidth / annotationCanvas.width;
-            const scaleY = blurImg.naturalHeight / annotationCanvas.height;
+          // No scaling needed - canvas coordinates = image coordinates
+          const srcX = bounds.x;
+          const srcY = bounds.y;
+          const srcWidth = bounds.width;
+          const srcHeight = bounds.height;
 
-            const srcX = bounds.x * scaleX;
-            const srcY = bounds.y * scaleY;
-            const srcWidth = bounds.width * scaleX;
-            const srcHeight = bounds.height * scaleY;
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = Math.max(1, Math.round(srcWidth));
+          tempCanvas.height = Math.max(1, Math.round(srcHeight));
+          const tempCtx = tempCanvas.getContext('2d');
 
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = Math.max(1, Math.round(srcWidth));
-            tempCanvas.height = Math.max(1, Math.round(srcHeight));
-            const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(blurImg, srcX, srcY, srcWidth, srcHeight, 0, 0, tempCanvas.width, tempCanvas.height);
 
-            tempCtx.drawImage(blurImg, srcX, srcY, srcWidth, srcHeight, 0, 0, tempCanvas.width, tempCanvas.height);
+          const blurRadius = annotation.blurRadius || 10;
+          finalCtx.filter = `blur(${blurRadius}px)`;
 
-            const blurRadius = annotation.blurRadius || 10;
-            finalCtx.filter = `blur(${blurRadius}px)`;
+          // Draw at the same coordinates - no scaling needed
+          finalCtx.drawImage(
+            tempCanvas,
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height
+          );
 
-            const finalScaleX = finalCanvas.width / annotationCanvas.width;
-            const finalScaleY = finalCanvas.height / annotationCanvas.height;
-
-            finalCtx.drawImage(
-              tempCanvas,
-              bounds.x * finalScaleX,
-              bounds.y * finalScaleY,
-              bounds.width * finalScaleX,
-              bounds.height * finalScaleY
-            );
-
-            finalCtx.filter = 'none';
-          }
+          finalCtx.filter = 'none';
         }
       }
 
@@ -5146,7 +5816,7 @@ function copyToClipboard() {
         ]);
         showCopyFeedback('Copied to clipboard!');
       } catch (err) {
-        console.error('Failed to copy to clipboard:', err);
+        logger.error('Failed to copy to clipboard:', err);
         showCopyFeedback('Failed to copy');
       }
     }, 'image/png');
@@ -5183,7 +5853,7 @@ function copyToClipboard() {
     Promise.all(loadPromises).then(() => {
       drawAnnotationsAndCopy();
     }).catch((error) => {
-      console.error('Error loading arrow images:', error);
+      logger.error('Error loading arrow images:', error);
       drawAnnotationsAndCopy();
     });
   }
@@ -5217,11 +5887,11 @@ function downloadImage(canvas, filename = null) {
         filename: defaultFilename
       }, (response) => {
         if (chrome.runtime.lastError) {
-          console.error('Download error:', chrome.runtime.lastError);
+          logger.error('Download error:', chrome.runtime.lastError);
           // Fallback to regular download
           fallbackDownload(blob, defaultFilename);
         } else if (response && response.success) {
-          console.log('File saved successfully');
+          logger.log('File saved successfully');
         } else {
           // Fallback to regular download
           fallbackDownload(blob, defaultFilename);
@@ -5251,7 +5921,7 @@ function exportImage(format) {
   const img = document.getElementById('screenshot-img');
 
   if (!canvas || !img) {
-    console.error('Canvas or image not found');
+    logger.error('Canvas or image not found');
     return;
   }
 
@@ -5275,11 +5945,11 @@ function exportImage(format) {
   } else if (format === 'jpg') {
     filename = `screenshot-annotated-${timestamp}.jpg`;
     mimeType = 'image/jpeg';
-    quality = 0.95;
+    quality = 0.92; // Standard high quality for JPEG
   } else if (format === 'pdf') {
     filename = `screenshot-annotated-${timestamp}.pdf`;
     mimeType = 'image/jpeg';
-    quality = 0.95;
+    quality = 0.92; // Standard high quality for JPEG (used in PDF)
   }
 
   // Draw all annotations with proper transformations
@@ -5306,6 +5976,7 @@ function exportImage(format) {
           annotation.type === 'freehand' || annotation.type === 'highlight' ||
           annotation.type === 'emoji' || annotation.type === 'callout' ||
           annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle' ||
+          annotation.type === 'magnify' ||
           annotation.type === 'line') {
         renderAnnotationShape(finalCtx, annotation, bounds);
         finalCtx.restore();
@@ -5391,10 +6062,10 @@ ${500 + base64Data.length}
             filename: filename
           }, (response) => {
             if (chrome.runtime.lastError) {
-              console.error('Download error:', chrome.runtime.lastError);
+              logger.error('Download error:', chrome.runtime.lastError);
               alert('Failed to download PDF. Please try again.');
             } else if (response && response.success) {
-              console.log('PDF saved successfully');
+              logger.log('PDF saved successfully');
             }
           });
         } else {
@@ -5405,10 +6076,10 @@ ${500 + base64Data.length}
             filename: filename
           }, (response) => {
             if (chrome.runtime.lastError) {
-              console.error('Download error:', chrome.runtime.lastError);
+              logger.error('Download error:', chrome.runtime.lastError);
               alert(`Failed to download ${format.toUpperCase()}. Please try again.`);
             } else if (response && response.success) {
-              console.log(`${format.toUpperCase()} saved successfully`);
+              logger.log(`${format.toUpperCase()} saved successfully`);
             }
           });
         }
@@ -5448,11 +6119,87 @@ ${500 + base64Data.length}
     Promise.all(loadPromises).then(() => {
       drawAnnotations();
     }).catch((error) => {
-      console.error('Error loading arrow images:', error);
+      logger.error('Error loading arrow images:', error);
       // Still try to draw what we can
       drawAnnotations();
     });
   }
+}
+
+// Calculate and update file size estimates for save dropdown
+async function updateFileSizeEstimates() {
+  const canvas = document.getElementById('annotation-canvas');
+  const img = document.getElementById('screenshot-img');
+
+  if (!canvas || !img) return;
+
+  // Create a temporary canvas for size estimation
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = canvas.width;
+  tempCanvas.height = canvas.height;
+  const tempCtx = tempCanvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+  tempCtx.imageSmoothingEnabled = false;
+
+  // Draw the current screenshot
+  tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  // Draw all annotations
+  annotations.forEach(annotation => {
+    const bounds = getAnnotationBounds(annotation);
+    if (!bounds) return;
+
+    tempCtx.save();
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
+
+    if (bounds.rotation && bounds.rotation !== 0) {
+      tempCtx.translate(centerX, centerY);
+      tempCtx.rotate(bounds.rotation * Math.PI / 180);
+      tempCtx.translate(-centerX, -centerY);
+    }
+
+    renderAnnotationShape(tempCtx, annotation, bounds);
+    tempCtx.restore();
+  });
+
+  // Format file size for display
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    else return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  };
+
+  // Calculate PNG size (lossless)
+  tempCanvas.toBlob((blob) => {
+    if (blob) {
+      const pngBtn = document.getElementById('save-png-btn');
+      if (pngBtn) {
+        pngBtn.innerHTML = `💾 Save as PNG <span style="color: #888; font-size: 10px;">(${formatSize(blob.size)})</span>`;
+      }
+    }
+  }, 'image/png');
+
+  // Calculate JPG size (quality: 0.92 - standard high quality)
+  tempCanvas.toBlob((blob) => {
+    if (blob) {
+      const jpgBtn = document.getElementById('save-jpg-btn');
+      if (jpgBtn) {
+        jpgBtn.innerHTML = `🖼️ Save as JPG <span style="color: #888; font-size: 10px;">(${formatSize(blob.size)})</span>`;
+      }
+    }
+  }, 'image/jpeg', 0.92);
+
+  // Calculate PDF size (same as JPG since PDF wraps JPEG)
+  tempCanvas.toBlob((blob) => {
+    if (blob) {
+      const pdfBtn = document.getElementById('save-pdf-btn');
+      if (pdfBtn) {
+        // PDF has some overhead, estimate ~5% larger
+        const estimatedSize = blob.size * 1.05;
+        pdfBtn.innerHTML = `📄 Save as PDF <span style="color: #888; font-size: 10px;">(~${formatSize(estimatedSize)})</span>`;
+      }
+    }
+  }, 'image/jpeg', 0.92);
 }
 
 // ===== GOOGLE DRIVE SHARE FUNCTIONS =====
@@ -5508,15 +6255,22 @@ async function handleShareToGoogleDrive() {
       shareStatus.style.display = 'none';
       shareSuccess.style.display = 'block';
 
+      // Display shortened link
       const linkInput = document.getElementById('share-link-input');
       if (linkInput) {
-        linkInput.value = result.link;
+        linkInput.value = result.link; // Shortened link
+      }
+
+      // Store full link for "Open in Drive" button
+      const openDriveBtn = document.getElementById('open-drive-btn');
+      if (openDriveBtn && result.fullLink) {
+        openDriveBtn.dataset.fullLink = result.fullLink;
       }
     } else {
       throw new Error(result.error || 'Upload failed');
     }
   } catch (error) {
-    console.error('Share error:', error);
+    logger.error('Share error:', error);
 
     // Show error state
     shareStatus.style.display = 'none';
@@ -5571,6 +6325,7 @@ function exportImageAsBlob(format) {
             annotation.type === 'freehand' || annotation.type === 'highlight' ||
             annotation.type === 'emoji' || annotation.type === 'callout' ||
             annotation.type === 'filled-rectangle' || annotation.type === 'filled-circle' ||
+          annotation.type === 'magnify' ||
             annotation.type === 'line') {
           renderAnnotationShape(finalCtx, annotation, bounds);
           finalCtx.restore();
@@ -5636,7 +6391,7 @@ function exportImageAsBlob(format) {
       Promise.all(loadPromises).then(() => {
         drawAnnotations();
       }).catch((error) => {
-        console.error('Error loading arrow images:', error);
+        logger.error('Error loading arrow images:', error);
         // Still try to draw what we can
         drawAnnotations();
       });
@@ -5674,7 +6429,7 @@ async function handleSignOut() {
       throw new Error(result.error || 'Sign out failed');
     }
   } catch (error) {
-    console.error('Sign out error:', error);
+    logger.error('Sign out error:', error);
     alert('Failed to sign out: ' + error.message);
   }
 }

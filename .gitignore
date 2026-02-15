@@ -4,3 +4,15 @@ node_modules/
 
 # Build artifacts and release packages
 *.zip
+
+# Internal planning and development documents
+PR_*.md
+PRODUCTION_AUDIT_REPORT.md
+TESTING.md
+TROUBLESHOOTING.md
+USER_GUIDE_*.md
+RELEASE_NOTES_*.md
+
+# Development tools
+create-icons.html
+generate-icons.js

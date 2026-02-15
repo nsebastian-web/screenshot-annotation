@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - Screenshot & Annotation</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⚙️ Settings</h1>
+      <p class="subtitle">Screenshot & Annotation Tool</p>
+    </header>
+
+    <section class="settings-section">
+      <h2>⌨️ Keyboard Shortcuts</h2>
+      <p class="section-description">Configure keyboard shortcuts for quick access to screenshot features.</p>
+
+      <div class="shortcuts-list" id="shortcutsList">
+        <!-- Shortcuts will be loaded here dynamically -->
+        <div class="loading">Loading shortcuts...</div>
+      </div>
+
+      <div class="action-buttons">
+        <button id="openShortcutsBtn" class="btn btn-primary">
+          🔧 Configure Shortcuts in Chrome
+        </button>
+      </div>
+
+      <div class="info-box">
+        <strong>Note:</strong> Chrome requires you to configure keyboard shortcuts through the browser's extension settings for security reasons. Click the button above to open the shortcuts configuration page.
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2>📋 Quick Reference</h2>
+      <div class="reference-table">
+        <div class="reference-row">
+          <div class="reference-label">Capture Screenshot</div>
+          <div class="reference-value" id="shortcut-capture-screenshot">
+            <span class="shortcut-badge loading-badge">Loading...</span>
+          </div>
+        </div>
+        <div class="reference-row">
+          <div class="reference-label">Full Page Screenshot</div>
+          <div class="reference-value" id="shortcut-capture-fullpage">
+            <span class="shortcut-badge loading-badge">Loading...</span>
+          </div>
+        </div>
+        <div class="reference-row">
+          <div class="reference-label">Capture Selection</div>
+          <div class="reference-value" id="shortcut-capture-selection">
+            <span class="shortcut-badge loading-badge">Loading...</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="preferencesSection">
+      <h2>⚙️ Preferences</h2>
+      <p class="section-description">Customize default settings for captures and exports.</p>
+
+      <div class="preferences-grid">
+        <div class="preference-item">
+          <label for="defaultFormat" class="preference-label">Default Format</label>
+          <select id="defaultFormat" class="preference-select">
+            <option value="png">PNG (Lossless)</option>
+            <option value="jpg">JPG (Smaller size)</option>
+            <option value="pdf">PDF (Document)</option>
+          </select>
+        </div>
+
+        <div class="preference-item">
+          <label for="jpgQuality" class="preference-label">JPG Quality</label>
+          <input type="range" id="jpgQuality" class="preference-range" min="60" max="100" value="90">
+          <span id="jpgQualityValue" class="range-value">90%</span>
+        </div>
+
+        <div class="preference-item">
+          <label class="preference-label">Auto-Upload to Drive</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autoUpload">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="preference-item">
+          <label class="preference-label">Auto-Create Date Folders</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autoDateFolders" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="preference-item">
+          <label class="preference-label">Generate QR Codes</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autoQR">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="preference-item">
+          <label class="preference-label">Shorten Links</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autoShorten" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="historySection">
+      <h2>🕒 Upload History</h2>
+      <p class="section-description">View and manage your recent screenshots.</p>
+
+      <div class="action-buttons">
+        <button id="clearHistoryBtn" class="btn btn-secondary">
+          🗑️ Clear History
+        </button>
+        <button id="exportHistoryBtn" class="btn btn-secondary">
+          💾 Export History
+        </button>
+      </div>
+
+      <div id="historyList" class="history-list">
+        <div class="loading">Loading history...</div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="advancedSection">
+      <h2>🔧 Advanced</h2>
+      <p class="section-description">Expert settings and integrations.</p>
+
+      <div class="advanced-options">
+        <div class="option-card">
+          <div class="option-header">
+            <span class="option-icon">🔗</span>
+            <div class="option-info">
+              <h4>Webhook Integration</h4>
+              <p>Send screenshots to Slack, Discord, or custom webhooks</p>
+            </div>
+          </div>
+          <button id="configureWebhookBtn" class="btn-outline">Configure</button>
+        </div>
+
+        <div class="option-card">
+          <div class="option-header">
+            <span class="option-icon">📦</span>
+            <div class="option-info">
+              <h4>Batch Operations</h4>
+              <p>Upload or delete multiple screenshots at once</p>
+            </div>
+          </div>
+          <button id="batchToolsBtn" class="btn-outline">Open Tools</button>
+        </div>
+
+        <div class="option-card">
+          <div class="option-header">
+            <span class="option-icon">🌐</span>
+            <div class="option-info">
+              <h4>Google Drive Settings</h4>
+              <p>Manage folders, accounts, and permissions</p>
+            </div>
+          </div>
+          <button id="driveSettingsBtn" class="btn-outline">Manage</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2>ℹ️ About</h2>
+      <div class="about-info">
+        <p><strong>Version:</strong> 7.0.0</p>
+        <p><strong>Features:</strong> Advanced annotations, full-page capture, selection mode, Google Drive integration with folder organization, QR codes, batch operations, upload history, and enhanced sharing</p>
+        <p style="margin-top: 16px;"><strong>What's New in 7.0:</strong></p>
+        <ul style="margin-top: 8px; padding-left: 20px; color: #666; font-size: 14px; line-height: 1.6;">
+          <li>Professional redesigned popup interface</li>
+          <li>Right-click context menu for quick capture</li>
+          <li>Recent screenshots quick access</li>
+          <li>First-time user onboarding</li>
+          <li>Enhanced Google Drive folder organization</li>
+          <li>Upload history management</li>
+          <li>Batch operations support</li>
+        </ul>
+      </div>
+    </section>
+
+    <footer>
+      <div class="footer-actions">
+        <button id="resetBtn" class="btn btn-secondary">Reset to Defaults</button>
+        <button id="closeBtn" class="btn btn-primary">Save & Close</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

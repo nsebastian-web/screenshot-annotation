@@ -334,8 +334,6 @@
   top: 0;
   left: 0;
   cursor: crosshair;
-  max-width: 100%;
-  height: auto;
   border-radius: 4px;
 }
 
