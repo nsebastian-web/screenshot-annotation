@@ -2,7 +2,7 @@
 
 > Professional Chrome extension for capturing, annotating, and sharing screenshots with Google Drive integration
 
-[![Version](https://img.shields.io/badge/version-7.0.0-blue.svg)](https://github.com/yourusername/screenshot-annotation/releases)
+[![Version](https://img.shields.io/badge/version-7.0.0-blue.svg)](https://github.com/nsebastian-web/screenshot-annotation/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Chrome Web Store](https://img.shields.io/badge/chrome-extension-yellow.svg)](https://chrome.google.com/webstore)
 
@@ -65,7 +65,7 @@ A powerful screenshot tool that replaces traditional design software for quick a
 *Coming soon*
 
 ### Manual Installation
-1. Download the [latest release](https://github.com/yourusername/screenshot-annotation/releases)
+1. Download the [latest release](https://github.com/nsebastian-web/screenshot-annotation/releases)
 2. Extract the ZIP file
 3. Open Chrome and navigate to `chrome://extensions/`
 4. Enable **Developer mode** (toggle in top right)
@@ -130,8 +130,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 💬 Support
 
-- 🐛 [Report a bug](https://github.com/yourusername/screenshot-annotation/issues/new?labels=bug)
-- 💡 [Request a feature](https://github.com/yourusername/screenshot-annotation/issues/new?labels=enhancement)
+- 🐛 [Report a bug](https://github.com/nsebastian-web/screenshot-annotation/issues/new?labels=bug)
+- 💡 [Request a feature](https://github.com/nsebastian-web/screenshot-annotation/issues/new?labels=enhancement)
 - 📧 [Contact](mailto:your.email@example.com)
 
 ---

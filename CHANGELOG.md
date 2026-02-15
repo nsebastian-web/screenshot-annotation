@@ -127,9 +127,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fixed** - Bug fixes
 - **Security** - Vulnerability fixes
 
-[7.0.0]: https://github.com/yourusername/screenshot-annotation/releases/tag/v7.0.0
-[6.0.0]: https://github.com/yourusername/screenshot-annotation/releases/tag/v6.0.0
-[5.0.0]: https://github.com/yourusername/screenshot-annotation/releases/tag/v5.0.0
-[4.0.0]: https://github.com/yourusername/screenshot-annotation/releases/tag/v4.0.0
-[2.0.0]: https://github.com/yourusername/screenshot-annotation/releases/tag/v2.0.0
-[1.0.0]: https://github.com/yourusername/screenshot-annotation/releases/tag/v1.0.0
+[7.0.0]: https://github.com/nsebastian-web/screenshot-annotation/releases/tag/v7.0.0
+[6.0.0]: https://github.com/nsebastian-web/screenshot-annotation/releases/tag/v6.0.0
+[5.0.0]: https://github.com/nsebastian-web/screenshot-annotation/releases/tag/v5.0.0
+[4.0.0]: https://github.com/nsebastian-web/screenshot-annotation/releases/tag/v4.0.0
+[2.0.0]: https://github.com/nsebastian-web/screenshot-annotation/releases/tag/v2.0.0
+[1.0.0]: https://github.com/nsebastian-web/screenshot-annotation/releases/tag/v1.0.0
